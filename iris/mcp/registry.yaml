@@ -1,0 +1,68 @@
+# IRIS MCP server registry — capabilities are SERVERS, not hardcoded code.
+#
+# GOLDEN RULE #1 (MCP-first): adding a capability = a line here, not core code.
+# Each server declares a transport (stdio | sse), how to reach it, and an
+# `enabled` flag. Disabled servers are placeholders filled in later phases.
+#
+# This Step 0.1 file is the declaration scaffold. The MCP host that reads it and
+# connects is built in PHASE 1 (STEP 1.1). Real servers are enabled per phase.
+
+servers:
+  # ── PHASE 1: safe servers first ──────────────────────────────────────────
+  filesystem:
+    enabled: false            # enabled in STEP 1.1
+    transport: stdio
+    command: "npx -y @modelcontextprotocol/server-filesystem ./workspace"
+    description: "Sandboxed file read/write, restricted to ./workspace."
+
+  websearch:
+    enabled: false            # enabled in STEP 1.1
+    transport: stdio
+    command: "npx -y mcp-server-fetch"
+    description: "Web search / fetch."
+
+  # ── PHASE 2: browser mesh (picked per task by mcp/browser_router.py) ──────
+  browser_use:
+    enabled: false
+    transport: sse
+    url: "http://localhost:7801/sse"
+    description: "browser-use MCP — AI-driven browsing for unknown pages."
+
+  playwright:
+    enabled: false
+    transport: stdio
+    command: "npx -y @playwright/mcp@latest"
+    description: "Playwright MCP — deterministic, accessibility-tree driven."
+
+  browser_mcp:
+    enabled: false
+    transport: sse
+    url: "http://localhost:7802/sse"
+    description: "BrowserMCP — real logged-in Chrome session via extension."
+
+  # ── PHASE 3: memory ───────────────────────────────────────────────────────
+  agentmemory:
+    enabled: false
+    transport: stdio
+    command: "npx -y agentmemory serve"
+    description: "Persistent semantic memory store."
+
+  # ── PHASE 4: communication + calendar ─────────────────────────────────────
+  gmail:
+    enabled: false
+    transport: stdio
+    command: ""               # maintained Google Workspace MCP; OAuth in README
+    description: "Gmail read/search/send via official API."
+
+  calendar:
+    enabled: false
+    transport: stdio
+    command: ""               # maintained Google Workspace MCP
+    description: "Calendar read/create/update via official API."
+
+  # ── PHASE 7: desktop control ──────────────────────────────────────────────
+  desktop:
+    enabled: false
+    transport: stdio
+    command: ""               # Windows-MCP (or OS equivalent)
+    description: "OS-level app control: open_app, click, type, screenshot."

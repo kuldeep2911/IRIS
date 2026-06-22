@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Env / secrets (GOLDEN RULE #8 — never commit secrets)
+.env
+*.key
+
+# Data
+*.db
+*.sqlite3
+iris.db
+
+# Sandbox contents (keep the dir, ignore files)
+workspace/*
+!workspace/.gitkeep
+
+# Node / dashboard
+node_modules/
+dashboard/dist/
+dashboard/node_modules/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store

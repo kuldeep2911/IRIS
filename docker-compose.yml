@@ -1,0 +1,73 @@
+# I.R.I.S. v5 — local stack.
+#
+# Brings up the stateless core + Postgres + Redis. MCP servers are external
+# processes declared in iris/mcp/registry.yaml and are added here as enabled
+# (commented placeholders below, filled in PHASE 1+). The core is stateless;
+# all state lives in Postgres/Redis/memory stores.
+
+services:
+  iris-core:
+    build: .
+    container_name: iris-core
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://iris:iris@postgres:5432/iris
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./workspace:/app/workspace      # filesystem MCP sandbox
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: iris-postgres
+    environment:
+      POSTGRES_USER: iris
+      POSTGRES_PASSWORD: iris
+      POSTGRES_DB: iris
+    ports:
+      - "5432:5432"
+    volumes:
+      - iris-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iris"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: iris-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - iris-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── MCP servers (filled in PHASE 1+; declared in iris/mcp/registry.yaml) ──
+  # browser-use MCP (SSE, :7801) — PHASE 2
+  # browser_mcp     (SSE, :7802) — PHASE 2 (real Chrome via extension)
+  # playwright MCP  (stdio)      — PHASE 2
+  # agentmemory     (stdio)      — PHASE 3
+  # gmail / calendar Workspace MCP (stdio, OAuth) — PHASE 4
+  # desktop (Windows-MCP, stdio) — PHASE 7
+  #
+  # Most MCP servers run on the host (need a real browser / OS / keychain) and
+  # are reached by iris-core over stdio or localhost SSE rather than as compose
+  # services. See README + registry.yaml.
+
+volumes:
+  iris-pgdata:
+  iris-redisdata:

@@ -1,0 +1,7 @@
+# Specialist sub-agent definitions (name, system_prompt, allowed_tool_tags).
+# Prompts adapted from the agency-agents reference. Populated in STEP 6.1 with
+# the 12 core specialists: frontend, backend, devops, database, code_reviewer,
+# security, content_writer, researcher, data_analyst, ux, email_copywriter,
+# deployer. Placeholder for Step 0.1.
+
+specialists: {}
