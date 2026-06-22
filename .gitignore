@@ -26,6 +26,11 @@ node_modules/
 dashboard/dist/
 dashboard/node_modules/
 
+# Local agent / editor tooling
+.claude/
+.vscode/
+.idea/
+
 # Tooling
 .pytest_cache/
 .ruff_cache/
