@@ -80,14 +80,33 @@ class Memory(Base):
 
 
 class Connection(Base):
+    """A third-party connector connection (Phase 9). Tenant + user scoped.
+
+    The actual OAuth/PAT token lives in the OS keychain; ``credentials_ref`` is
+    only the keychain KEY, never the token itself (GOLDEN RULE #8).
+    """
+
     __tablename__ = "connections"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
     tenant_id: Mapped[str] = mapped_column(String(64), index=True)
-    type: Mapped[str] = mapped_column(String(64))
+    user_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    connector_id: Mapped[str] = mapped_column(String(64), index=True, default="")
+    # legacy alias kept nullable for back-compat with the Phase 1 connections repo
+    type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="disconnected")
+    scopes_granted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     credentials_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
+    last_used_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+# Composite index for the common connector lookup.
+Index("ix_connections_tenant_user_connector", Connection.tenant_id,
+      Connection.user_id, Connection.connector_id)
 
 
 class ActionAudit(Base):

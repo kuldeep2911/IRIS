@@ -12,6 +12,7 @@ are held open for the app's lifetime via an ``AsyncExitStack``.
 from __future__ import annotations
 
 import asyncio
+import os
 import shlex
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -43,6 +44,10 @@ class MCPHost:
         self._schemas: list[ToolSchema] = []          # merged, for function-calling
         self._health: dict[str, bool] = {}            # server name -> up/down
         self._connected = False
+        # ── connector servers (Phase 9): per (tenant,user,connector) ───────────
+        self._connector_stacks: dict[str, AsyncExitStack] = {}   # key -> stack
+        self._connector_schemas: dict[str, list[ToolSchema]] = {}  # key -> schemas
+        self._connector_confirm: dict[str, set[str]] = {}        # key -> confirm tools
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     async def connect_all(self) -> dict[str, bool]:
@@ -89,6 +94,112 @@ class MCPHost:
 
     def health(self) -> dict[str, bool]:
         return dict(self._health)
+
+    # ── connector server lifecycle (Phase 9) ──────────────────────────────────
+    @staticmethod
+    def connector_key(tenant_id: str, user_id: str | None, connector_id: str) -> str:
+        return f"conn:{tenant_id}:{user_id or '-'}:{connector_id}"
+
+    async def start_connector_server(self, connection: Any, token: str) -> None:
+        """Start a connected connector's MCP server with the token injected.
+
+        Restarts cleanly if already running (used after a token refresh). The
+        server's tools become routable immediately and appear in
+        ``schemas_for_user`` for this (tenant, user).
+        """
+        from iris.connectors.catalog import get_connector
+
+        spec = get_connector(connection.connector_id)
+        key = self.connector_key(connection.tenant_id, connection.user_id, connection.connector_id)
+        await self.stop_connector_server(
+            connection.tenant_id, connection.user_id, connection.connector_id
+        )
+
+        stack = AsyncExitStack()
+        session = await self._spawn_connector(stack, spec, token)
+        await session.initialize()
+        listed = await session.list_tools()
+
+        schemas: list[ToolSchema] = []
+        for tool in listed.tools:
+            self._tool_to_server[tool.name] = key
+            schemas.append({
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": tool.inputSchema or {"type": "object", "properties": {}},
+            })
+        self._sessions[key] = session
+        self._connector_stacks[key] = stack
+        self._connector_schemas[key] = schemas
+        self._connector_confirm[key] = set(spec.confirm_tools)
+        self._health[key] = True
+        log.info("connector.server_started", connector=connection.connector_id, tools=len(schemas))
+
+    async def stop_connector_server(
+        self, tenant_id: str, user_id: str | None, connector_id: str
+    ) -> None:
+        key = self.connector_key(tenant_id, user_id, connector_id)
+        if key not in self._connector_stacks:
+            return
+        # remove this connector's tool routes
+        for tool in [t for t, srv in self._tool_to_server.items() if srv == key]:
+            self._tool_to_server.pop(tool, None)
+        self._connector_schemas.pop(key, None)
+        self._connector_confirm.pop(key, None)
+        self._sessions.pop(key, None)
+        self._health.pop(key, None)
+        try:
+            await self._connector_stacks.pop(key).aclose()
+        except Exception as exc:  # noqa: BLE001 — teardown best-effort
+            log.warning("connector.stop_failed", connector=connector_id, error=str(exc))
+
+    def schemas_for_user(self, tenant_id: str, user_id: str | None) -> list[ToolSchema]:
+        """Core tool schemas PLUS this user's connected connector tools."""
+        prefix = f"conn:{tenant_id}:{user_id or '-'}:"
+        out = list(self._schemas)
+        for key, schemas in self._connector_schemas.items():
+            if key.startswith(prefix):
+                out.extend(schemas)
+        return out
+
+    def connector_confirm_tools(self, tenant_id: str, user_id: str | None) -> set[str]:
+        """Union of confirm_tools across this user's connected connectors."""
+        prefix = f"conn:{tenant_id}:{user_id or '-'}:"
+        tools: set[str] = set()
+        for key, confirm in self._connector_confirm.items():
+            if key.startswith(prefix):
+                tools |= confirm
+        return tools
+
+    def running_connectors(self, tenant_id: str, user_id: str | None) -> list[str]:
+        prefix = f"conn:{tenant_id}:{user_id or '-'}:"
+        return [k.split(":")[-1] for k in self._connector_stacks if k.startswith(prefix)]
+
+    async def _spawn_connector(self, stack: AsyncExitStack, spec: Any, token: str) -> Any:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        mcp_spec = spec.mcp
+        if mcp_spec.transport == "stdio":
+            command, *args = shlex.split(mcp_spec.command or "")
+            env = dict(os.environ)
+            if mcp_spec.token_injection == "env" and mcp_spec.token_env_var:
+                env[mcp_spec.token_env_var] = token
+            elif mcp_spec.token_injection == "arg":
+                args.append(token)
+            params = StdioServerParameters(command=command, args=args, env=env)
+            read, write = await stack.enter_async_context(stdio_client(params))
+        elif mcp_spec.transport == "sse":
+            from mcp.client.sse import sse_client
+
+            await _assert_reachable(mcp_spec.url)
+            headers = None
+            if mcp_spec.token_injection == "header":
+                headers = {"Authorization": f"Bearer {token}"}
+            read, write = await stack.enter_async_context(sse_client(mcp_spec.url, headers=headers))
+        else:
+            raise ToolError(f"unknown transport '{mcp_spec.transport}'")
+        return await stack.enter_async_context(ClientSession(read, write))
 
     async def invoke(self, tool_name: str, args: dict[str, Any] | None = None) -> str:
         """Route a tool call to its owning server; return normalized text.

@@ -1,0 +1,49 @@
+# Connector catalog — DATA, not code. Each entry declares everything needed to
+# connect an app and run its MCP server. Adding a connector = adding an entry.
+# (Step 9.1 seeds gmail (oauth2) + github (pat); the full 20 land in Step 9.7.)
+
+gmail:
+  name: "Gmail"
+  category: "communication"
+  icon: "tabler:brand-gmail"
+  auth:
+    type: "oauth2"
+    authorize_url: "https://accounts.google.com/o/oauth2/v2/auth"
+    token_url: "https://oauth2.googleapis.com/token"
+    scopes:
+      - "https://www.googleapis.com/auth/gmail.modify"
+      - "https://www.googleapis.com/auth/userinfo.email"
+    pkce: true
+    # Google ONLY returns a refresh_token when these are set on first consent.
+    extra_authorize_params:
+      access_type: "offline"
+      prompt: "consent"
+    client_id_env: "GOOGLE_CLIENT_ID"
+    client_secret_env: "GOOGLE_CLIENT_SECRET"
+    userinfo_url: "https://www.googleapis.com/oauth2/v2/userinfo"
+    account_field: "email"
+  mcp:
+    # Maintained Gmail MCP server: @gongrzhe/server-gmail-autoauth-mcp
+    transport: "stdio"
+    command: "npx -y @gongrzhe/server-gmail-autoauth-mcp"
+    token_injection: "env"
+    token_env_var: "GMAIL_OAUTH_TOKEN"
+  confirm_tools: ["send_email"]
+
+github:
+  name: "GitHub"
+  category: "dev"
+  icon: "tabler:brand-github"
+  auth:
+    type: "pat"
+    help_url: "https://github.com/settings/tokens"
+    token_label: "Personal Access Token (repo, read:org, workflow)"
+    validate_url: "https://api.github.com/user"   # cheap authed call to validate
+    account_field: "login"
+  mcp:
+    # Maintained GitHub MCP server: @modelcontextprotocol/server-github
+    transport: "stdio"
+    command: "npx -y @modelcontextprotocol/server-github"
+    token_injection: "env"
+    token_env_var: "GITHUB_PERSONAL_ACCESS_TOKEN"
+  confirm_tools: ["merge_pull_request", "delete_repository", "create_or_update_file"]

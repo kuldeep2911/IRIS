@@ -109,6 +109,14 @@ class Settings(BaseSettings):
     WAKE_THRESHOLD: float = 0.5
     VOICE_CHAT_URL: str = "http://localhost:8000/chat"
 
+    # ── Connectors (Phase 9) ──────────────────────────────────────────────
+    # ONE exact redirect URI used everywhere (authorize + token exchange). This
+    # EXACT string must be registered in each provider's OAuth app config.
+    CONNECTOR_REDIRECT_URI: str = "http://localhost:8000/connectors/callback"
+    # HMAC secret for signing the OAuth `state` (CSRF protection). Falls back to
+    # the crypto passphrase/salt if unset.
+    CONNECTOR_STATE_SECRET: str = ""
+
     # ── Browser mesh (Phase 2) ────────────────────────────────────────────
     # Real Chrome profile dir so logged-in sessions (Gmail/WhatsApp/etc) are
     # reused by the browser MCP servers. Empty -> servers use their own profile.

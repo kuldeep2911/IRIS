@@ -32,7 +32,10 @@ _SECRET_KEY_HINTS: tuple[str, ...] = (
 _VALUE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"AIza[0-9A-Za-z_\-]{20,}"),          # Google API key
     re.compile(r"sk-[A-Za-z0-9]{20,}"),               # OpenAI-style key
+    re.compile(r"gh[posru]_[A-Za-z0-9]{20,}"),        # GitHub PAT
     re.compile(r"Bearer\s+[A-Za-z0-9._\-]+", re.IGNORECASE),
+    # OAuth token fields (access_token / refresh_token / id_token = "...").
+    re.compile(r'(?i)(access_token|refresh_token|id_token)["\s]*[=:]["\s]*\S+'),
     re.compile(r"(?i)(password|passwd|token|secret)\s*[=:]\s*\S+"),
 )
 
