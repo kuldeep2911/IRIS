@@ -21,13 +21,21 @@ BROWSER_MCP = "browser_mcp"
 PLAYWRIGHT = "playwright"
 BROWSER_USE = "browser_use"
 
+# Messaging-app intents ("message X on whatsapp", "text mom on whatsapp", …).
+# These are authenticated, persistent-session targets -> the real Chrome session
+# (browser_mcp), where the WhatsApp Web / Telegram login already lives.
+_MESSAGING_SIGNALS: tuple[str, ...] = (
+    "whatsapp", "whats app", "telegram", "messenger", "instagram dm",
+    "dm on", "text on", "message on", "send a message to",
+)
+
 # Authenticated / logged-in targets -> the real Chrome session.
 _AUTH_SIGNALS: tuple[str, ...] = (
     "log in", "login", "log into", "sign in", "sign into", "my account",
-    "gmail", "inbox", "email", "whatsapp", "linkedin", "facebook", "instagram",
+    "gmail", "inbox", "email", "linkedin", "facebook", "instagram",
     "twitter", "x.com", "bank", "banking", "paypal", "amazon order", "netflix",
     "github", "calendar", "dashboard", "authenticated", "logged in",
-)
+) + _MESSAGING_SIGNALS
 
 # Known structured form/flow work -> deterministic Playwright.
 _STRUCTURED_SIGNALS: tuple[str, ...] = (
@@ -61,6 +69,16 @@ def choose_browser(task: str) -> str:
         return BROWSER_USE
     # Default: agentic browser-use handles arbitrary unknown pages.
     return BROWSER_USE
+
+
+def is_messaging_intent(task: str) -> bool:
+    """True if the task is a messaging-app action (WhatsApp/Telegram/etc).
+
+    Used by the orchestrator to route "message <name> on whatsapp" to a browser
+    task on the persistent, logged-in Chrome session (browser_mcp). Sends are
+    still confirmation-gated (``whatsapp_send``).
+    """
+    return _contains_any((task or "").lower(), _MESSAGING_SIGNALS)
 
 
 def _contains_any(haystack: str, needles: tuple[str, ...]) -> bool:

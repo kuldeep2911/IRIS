@@ -72,6 +72,59 @@ BROWSER_USER_DATA_DIR=C:\Users\<you>\AppData\Local\Google\Chrome\User Data
 If a browser server isn't running it's simply marked **down** (the host isolates
 failures); `playwright` alone is enough for search + structured form tasks.
 
+## Gmail + Calendar (Phase 4)
+
+Email and calendar are maintained Google MCP servers (official APIs) — IRIS adds
+no bespoke API code. They stay **down until you complete OAuth**; the host skips
+a server whose credentials are missing (so startup never hangs), then connects
+once configured. Tokens live in each server's credential store / the OS keychain
+— never in IRIS code, prompts, or logs.
+
+**1. Google Cloud OAuth client** (one-time): in Google Cloud Console create an
+OAuth 2.0 *Desktop* client, enable the **Gmail API** and **Google Calendar API**,
+and download the client secret JSON.
+
+**2. Gmail** (`@gongrzhe/server-gmail-autoauth-mcp`):
+```bash
+mkdir -p ~/.gmail-mcp
+cp /path/to/client_secret.json ~/.gmail-mcp/gcp-oauth.keys.json
+npx -y @gongrzhe/server-gmail-autoauth-mcp auth      # opens a browser, then writes
+                                                     # ~/.gmail-mcp/credentials.json
+```
+Once `~/.gmail-mcp/credentials.json` exists, IRIS auto-connects the `gmail` server.
+
+**3. Calendar** (`@cocal/google-calendar-mcp`): point it at the client secret and
+authorise:
+```bash
+export GOOGLE_OAUTH_CREDENTIALS=/path/to/client_secret.json   # add to .env
+npx -y @cocal/google-calendar-mcp auth
+```
+With `GOOGLE_OAUTH_CREDENTIALS` set, IRIS auto-connects the `calendar` server.
+
+**Privacy:** `email_read`/search results are reduced to **summaries**
+(subject + sender + snippet) before anything reaches Gemini — full bodies never
+leave your machine ([`iris/core/privacy.py`](iris/core/privacy.py)).
+**Confirmation:** `email_send` and `calendar_delete` always require explicit
+confirmation ([`iris/core/confirm.py`](iris/core/confirm.py)).
+
+## WhatsApp (Phase 4.2)
+
+WhatsApp uses **WhatsApp Web through the real Chrome session** (`browser_mcp`) —
+no unofficial API, no hand-rolled Playwright (that was the v3 failure). The
+browser router sends any messaging intent ("message mom on whatsapp") to
+`browser_mcp` where the session already lives ([`iris/mcp/browser_router.py`](iris/mcp/browser_router.py)).
+
+**First-run login (one-time):** in the real Chrome profile used by the BrowserMCP
+extension, open <https://web.whatsapp.com> and scan the **QR code** with your
+phone (WhatsApp → Linked devices). The session persists in that Chrome profile
+(`BROWSER_USER_DATA_DIR`), so IRIS reuses it on later runs — no re-login.
+
+**Rules:** `whatsapp_send` requires confirmation before sending; reads return
+**summaries only** (last-N messages, sender + snippet — bodies stripped by the
+privacy filter). Example tasks:
+- *"Send a WhatsApp to Priya saying I'm running 10 minutes late."* (confirm first)
+- *"Summarise the last 10 messages in my family group."* (summaries only)
+
 ## Make targets
 
 | Target          | Does                                                    |

@@ -56,17 +56,27 @@ servers:
     description: "Persistent semantic memory store (chromadb-backed)."
 
   # ── PHASE 4: communication + calendar ─────────────────────────────────────
+  # Maintained Google MCP servers (official APIs). They stay DOWN until OAuth is
+  # set up (see README): the host skips them while their credentials are absent,
+  # so startup never hangs. Tokens live in the OS keychain / the server's own
+  # credential store — never in IRIS code or prompts (GOLDEN RULE #8).
   gmail:
-    enabled: false
+    enabled: true
     transport: stdio
-    command: ""               # maintained Google Workspace MCP; OAuth in README
-    description: "Gmail read/search/send via official API."
+    command: "npx -y @gongrzhe/server-gmail-autoauth-mcp"
+    connect_timeout: 30
+    requires_file:
+      - "~/.gmail-mcp/credentials.json"   # created by the one-time `auth` step
+    description: "Gmail read/search/send via the official Gmail API."
 
   calendar:
-    enabled: false
+    enabled: true
     transport: stdio
-    command: ""               # maintained Google Workspace MCP
-    description: "Calendar read/create/update via official API."
+    command: "npx -y @cocal/google-calendar-mcp"
+    connect_timeout: 30
+    requires_env:
+      - "GOOGLE_OAUTH_CREDENTIALS"        # path to the OAuth client secret JSON
+    description: "Calendar read/create/update/delete via the official API."
 
   # ── PHASE 7: desktop control ──────────────────────────────────────────────
   desktop:

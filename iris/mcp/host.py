@@ -52,8 +52,16 @@ class MCPHost:
         for name, cfg in self._load_registry().items():
             if not isinstance(cfg, dict) or not cfg.get("enabled"):
                 continue
+            # Skip (mark down) without spawning if preconditions are unmet — e.g.
+            # an OAuth server with no credentials yet. Avoids hangs/downloads.
+            unmet = _unmet_preconditions(cfg)
+            if unmet:
+                self._health[name] = False
+                log.info("mcp.skipped", server=name, missing=unmet)
+                continue
+            timeout = float(cfg.get("connect_timeout", _CONNECT_TIMEOUT))
             try:
-                await asyncio.wait_for(self._connect_one(name, cfg), timeout=_CONNECT_TIMEOUT)
+                await asyncio.wait_for(self._connect_one(name, cfg), timeout=timeout)
                 self._health[name] = True
                 log.info("mcp.connected", server=name)
             except Exception as exc:  # noqa: BLE001 — one bad server must not sink the host
@@ -150,6 +158,25 @@ class MCPHost:
                     "parameters": tool.inputSchema or {"type": "object", "properties": {}},
                 }
             )
+
+
+def _unmet_preconditions(cfg: dict[str, Any]) -> list[str]:
+    """Return missing precondition names: required env vars / files not present.
+
+    Lets a server be declared+enabled yet stay down (without spawning) until the
+    user configures it — e.g. OAuth credentials for gmail/calendar.
+    """
+    import os
+    from pathlib import Path
+
+    missing: list[str] = []
+    for env in cfg.get("requires_env", []) or []:
+        if not os.environ.get(env):
+            missing.append(f"env:{env}")
+    for path in cfg.get("requires_file", []) or []:
+        if not Path(path).expanduser().exists():
+            missing.append(f"file:{path}")
+    return missing
 
 
 async def _assert_reachable(url: str, timeout: float = 2.0) -> None:

@@ -26,6 +26,7 @@ import structlog
 from iris.config.settings import get_settings
 from iris.core.confirm import is_payment, needs_confirmation
 from iris.core.context import RequestContext, assemble, est_tokens
+from iris.core.privacy import summarise_tool_output
 from iris.llm.base import LLMClient, ToolCall, Usage
 from iris.mcp.host import MCPHost, ToolError
 from iris.memory.mem0_client import Mem0Client
@@ -173,6 +174,9 @@ class Orchestrator:
 
         try:
             result = await self._mcp.invoke(call.name, call.args)
+            # Privacy gate: strip raw email/chat bodies to summaries before the
+            # result enters the prompt context (GOLDEN RULE #5).
+            result = summarise_tool_output(call.name, result)
             await ctx.emit("tool_result", {"tool": call.name, "status": "ok"})
             return result
         except ToolError as exc:

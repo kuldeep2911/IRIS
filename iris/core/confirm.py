@@ -18,11 +18,18 @@ _CONFIRM_KEYWORDS: tuple[str, ...] = (
     "send", "submit", "delete", "publish", "post", "remove", "destroy", "drop",
 )
 
-# Explicit tool names that always require confirmation (extended per phase).
-# Browser submit/login-commit tools land here as the servers expose them.
+# Explicit tool names / canonical actions that ALWAYS require confirmation.
+# (Substring keywords above already catch most send/delete tool names; these are
+# the canonical, server-agnostic action names the policy guarantees are gated.)
 _CONFIRM_TOOLS: frozenset[str] = frozenset(
     {
         "browser_file_upload",   # uploading a file is an outward action
+        # Phase 4 — communication + calendar:
+        "email_send",            # Gmail: sending an email
+        "calendar_delete",       # Calendar: deleting an event
+        "whatsapp_send",         # WhatsApp: sending a message
+        # Common concrete tool names exposed by the maintained servers:
+        "send_email", "delete_event",
     }
 )
 
