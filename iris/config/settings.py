@@ -55,6 +55,28 @@ class Settings(BaseSettings):
     # ── Daily cost guards (per-tenant + global token budgets) ─────────────
     DAILY_TOKEN_BUDGET: int = 5_000_000
 
+    # ── Screen intelligence (Phase 7.2) — OPT-IN, privacy-first, OFF default ──
+    # In-memory only (never persisted); only allow-listed apps are captured and
+    # sensitive apps (banking/passwords) are never captured.
+    SCREEN_INTEL_ENABLED: bool = False
+    SCREEN_ALLOWLIST: list[str] = [
+        "code", "visual studio", "pycharm", "intellij", "sublime", "vim",
+        "terminal", "powershell", "cmd", "iterm", "chrome", "firefox", "edge",
+        "notepad", "word", "excel", "obsidian", "notion", "figma",
+    ]
+    SCREEN_BLOCKLIST: list[str] = [
+        "bank", "banking", "paypal", "password", "keepass", "1password",
+        "bitwarden", "lastpass", "wallet", "crypto", "metamask", "authenticator",
+        "login", "sign in",
+    ]
+
+    # ── Proactive alerts (Phase 7.2) — all OFF by default ─────────────────
+    PROACTIVE_MEETING_ALERTS: bool = False
+    PROACTIVE_EMAIL_ALERTS: bool = False
+    PROACTIVE_DAILY_BRIEFING: bool = False
+    DAILY_BRIEFING_TIME: str = "08:00"      # HH:MM local
+    MEETING_ALERT_LEAD_MINUTES: int = 10
+
     # ── Filesystem sandbox (filesystem/shell MCP may only touch this) ─────
     WORKSPACE_DIR: str = "./workspace"
 

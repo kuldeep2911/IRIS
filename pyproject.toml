@@ -47,6 +47,19 @@ voice = [
     "kokoro-onnx>=0.4",      # local Kokoro-82M female voice (af_heart, Apache-2.0)
     "faster-whisper>=1.0",   # default STT (MIT, local, no key)
 ]
+desktop = [
+    "pyautogui>=0.9.54",     # click / type
+    "pygetwindow>=0.0.9",    # window titles / bounds
+    "pyperclip>=1.9",        # clipboard
+    "mss>=9.0",              # fast screenshots
+]
+screen = [
+    "mss>=9.0",              # screenshots for screen intelligence
+    "pygetwindow>=0.0.9",    # active-window allow-list checks
+]
+proactive = [
+    "apscheduler>=3.10",     # scheduled proactive alerts
+]
 
 [build-system]
 requires = ["setuptools>=68"]

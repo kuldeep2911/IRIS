@@ -89,9 +89,12 @@ class Orchestrator:
         self._mem0 = Mem0Client(llm, self._memory)
         self._specialists = load_specialists()
         self._subagents = SubAgentRunner(llm, mcp, self._specialists)
+        from iris.tools.screen import ScreenIntel
+        self._screen = ScreenIntel()  # opt-in; no-op unless SCREEN_INTEL_ENABLED
 
     async def handle(self, request: str, ctx: RequestContext) -> Result:
         ctx.memory = self._memory  # used by assemble() for recall
+        ctx.screen = self._screen  # opt-in screen intel (Phase 7.2)
         assembled = await assemble(request, ctx)
         rc = classify(request, est_tokens(assembled))
 
@@ -327,13 +330,18 @@ class Orchestrator:
     def _render_user(assembled: dict[str, Any]) -> str:
         request = str(assembled.get("request", ""))
         memory = assembled.get("memory") or []
-        if not memory:
+        screen = assembled.get("screen")
+        if not memory and not screen:
             return request
-        facts = "\n".join(f"- {m}" for m in memory)
-        return (
-            "Known facts about the user (from memory; use if relevant, ignore if not):\n"
-            f"{facts}\n\nUser request: {request}"
-        )
+        blocks = []
+        if memory:
+            facts = "\n".join(f"- {m}" for m in memory)
+            blocks.append(
+                "Known facts about the user (from memory; use if relevant):\n" + facts
+            )
+        if screen:
+            blocks.append(f"What's currently on the user's screen:\n{screen}")
+        return "\n\n".join(blocks) + f"\n\nUser request: {request}"
 
 
 # ── message helpers ──────────────────────────────────────────────────────────

@@ -30,6 +30,8 @@ _CONFIRM_TOOLS: frozenset[str] = frozenset(
         "whatsapp_send",         # WhatsApp: sending a message
         # Common concrete tool names exposed by the maintained servers:
         "send_email", "delete_event",
+        # Phase 7 — desktop actions that modify files/system:
+        "open_app", "click_element", "type_text", "set_clipboard",
     }
 )
 

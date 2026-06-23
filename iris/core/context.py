@@ -28,6 +28,8 @@ class RequestContext:
     # MemoryStore for recall during context assembly (set by the orchestrator).
     # Typed as Any to keep the core import-light. Duck-typed: .recall(...).
     memory: Any = None
+    # ScreenIntel (Phase 7.2), set by the orchestrator when enabled. Duck-typed.
+    screen: Any = None
     # Confirmation behavior when no interactive channel answers (GOLDEN RULE #6).
     # Default DENY (skip) the gated action — safe by default.
     auto_confirm: bool = False
@@ -51,8 +53,32 @@ async def assemble(request: str, ctx: RequestContext) -> dict[str, Any]:
         "session_id": ctx.session_id,
         "request": request,
         "memory": memory_block,  # list[str], already sanitised + deduped
-        # "screen": "...",  # Phase 7
+        "screen": await _screen_context(request, ctx),  # str | None (opt-in, in-memory)
     }
+
+
+# Lightweight signal that the user is asking about their current screen/work.
+_SCREEN_QUERY_HINTS = (
+    "what am i working on", "what's on my screen", "whats on my screen",
+    "this screen", "on screen", "what do you see", "looking at", "right now",
+    "current window", "what am i doing",
+)
+
+
+async def _screen_context(request: str, ctx: RequestContext) -> str | None:
+    """Opt-in screen description, only when enabled and the ask is screen-related.
+
+    Best-effort and in-memory only (GOLDEN RULE #5: nothing sensitive persisted).
+    """
+    if ctx.screen is None or not getattr(ctx.screen, "enabled", False):
+        return None
+    t = (request or "").lower()
+    if not any(h in t for h in _SCREEN_QUERY_HINTS):
+        return getattr(ctx.screen, "recent", lambda _t: None)(ctx.tenant_id)
+    try:
+        return await ctx.screen.describe(ctx.tenant_id, refresh=True)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 async def _recall_memory(request: str, ctx: RequestContext, k: int = 8) -> list[str]:

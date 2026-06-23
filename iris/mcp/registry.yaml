@@ -79,8 +79,12 @@ servers:
     description: "Calendar read/create/update/delete via the official API."
 
   # ── PHASE 7: desktop control ──────────────────────────────────────────────
+  # Thin MCP server over maintained automation libs (no pip 'Windows-MCP' exists).
+  # The server always connects + lists tools; each tool needs the `desktop` extra
+  # (pip install -e ".[desktop]"). CursorTouch Windows-MCP is a drop-in swap.
   desktop:
-    enabled: false
+    enabled: true
     transport: stdio
-    command: ""               # Windows-MCP (or OS equivalent)
-    description: "OS-level app control: open_app, click, type, screenshot."
+    command: "python -m iris.mcp.servers.desktop_server"
+    connect_timeout: 30
+    description: "OS-level app control: open_app, click, type, read_window, screenshot, clipboard."

@@ -156,6 +156,42 @@ python -m iris.voice.wake          # run the live loop (needs a mic; no API keys
 LiveKit can replace the local mic/speaker transport for streaming/remote use
 (the FRIDAY pattern) without changing the loop.
 
+## Desktop control (Phase 7.1)
+
+OS-level app control is an MCP server ([`iris/mcp/servers/desktop_server.py`](iris/mcp/servers/desktop_server.py))
+exposing `open_app`, `list_windows`, `read_window`, `click_element`, `type_text`,
+`take_screenshot`, `get_clipboard`, `set_clipboard`. The server always connects
+and lists its tools; each tool needs the automation libs:
+
+```bash
+pip install -e ".[desktop]"   # pyautogui, pygetwindow, pyperclip, mss
+```
+
+System-modifying actions (`open_app`, `click_element`, `type_text`,
+`set_clipboard`) are **confirmation-gated**; reads (`read_window`,
+`take_screenshot`, `get_clipboard`) are not. No pip-installable "Windows-MCP"
+exists, so this thin server wraps maintained libraries — the CursorTouch
+[Windows-MCP](https://github.com/CursorTouch/Windows-MCP) is a drop-in swap
+(point the `desktop` registry entry at it). On Linux/macOS the same tools work
+via the cross-platform libs; an OS-native desktop MCP can be substituted.
+
+## Screen intelligence + proactive alerts (Phase 7.2)
+
+Both are **opt-in and OFF by default**.
+
+**Screen intelligence** ([`iris/tools/screen.py`](iris/tools/screen.py)): when
+`SCREEN_INTEL_ENABLED=true`, IRIS can describe what you're working on — capture →
+Gemini vision (Flash) → a short description that lives **in memory only, never
+persisted**. An **app allow-list** gates what may be captured and a block-list
+(banking/passwords) is never captured. Ask *"what am I working on?"* and IRIS
+describes the active window. Needs `pip install -e ".[screen]"`.
+
+**Proactive alerts** ([`iris/core/proactive.py`](iris/core/proactive.py)):
+APScheduler jobs — meeting-soon, urgent-email, daily briefing — each gated by its
+own flag (`PROACTIVE_MEETING_ALERTS`, `PROACTIVE_EMAIL_ALERTS`,
+`PROACTIVE_DAILY_BRIEFING`, all default off). Nothing is scheduled unless enabled.
+Needs `pip install -e ".[proactive]"`.
+
 ## Make targets
 
 | Target          | Does                                                    |
