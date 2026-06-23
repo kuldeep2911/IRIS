@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import asyncio
+
 import structlog
 
 from iris.config.settings import get_settings
@@ -26,12 +28,18 @@ from iris.core.confirm import is_payment, needs_confirmation
 from iris.core.context import RequestContext, assemble, est_tokens
 from iris.llm.base import LLMClient, ToolCall, Usage
 from iris.mcp.host import MCPHost, ToolError
+from iris.memory.mem0_client import Mem0Client
+from iris.memory.store import MemoryStore
 from iris.router.model_router import classify, model_for
 
 log = structlog.get_logger(__name__)
 
 MAX_STEPS = 8           # agent-loop iterations (model<->tools)
 MAX_TOOL_ERRORS = 5     # total tool failures before escalating
+
+# Strong refs to in-flight fire-and-forget learn tasks (GC safety only — not
+# request state; cleared on completion).
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
 _SYSTEM_PROMPT_TMPL = (
     "You are I.R.I.S. (Intelligent Responsive Intelligence System), a concise, "
@@ -74,9 +82,12 @@ class Orchestrator:
     def __init__(self, llm: LLMClient, mcp: MCPHost) -> None:
         self._llm = llm
         self._mcp = mcp
+        self._memory = MemoryStore(mcp)
+        self._mem0 = Mem0Client(llm, self._memory)
 
     async def handle(self, request: str, ctx: RequestContext) -> Result:
-        assembled = assemble(request, ctx)
+        ctx.memory = self._memory  # used by assemble() for recall
+        assembled = await assemble(request, ctx)
         rc = classify(request, est_tokens(assembled))
         choice = model_for(rc)
 
@@ -101,6 +112,8 @@ class Orchestrator:
 
             if not resp.has_tool_calls:
                 await ctx.emit("final", {"text": resp.text})
+                # Learn from this turn (fire-and-forget; never blocks the reply).
+                self._schedule_learn(ctx, request, resp.text)
                 return Result(
                     text=resp.text,
                     usage=total_usage,
@@ -168,6 +181,23 @@ class Orchestrator:
             # Feed the error back so the model can try an alternative approach.
             return f"ERROR: {exc}"
 
+    def _schedule_learn(self, ctx: RequestContext, request: str, reply: str) -> None:
+        """Fire-and-forget the Mem0 AUDN learn loop for this turn."""
+        if not self._memory.available:
+            return
+        turn = {"user": request, "assistant": reply}
+
+        async def _run() -> None:
+            try:
+                await self._mem0.learn(ctx.tenant_id, ctx.user_id, turn)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("orchestrator.learn_failed", error=str(exc))
+
+        task = asyncio.create_task(_run())
+        # Keep a reference so the task isn't GC'd mid-flight.
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
+
     async def _wait_or_autoskip(self, ctx: RequestContext, call: ToolCall) -> bool:
         """Resolve a confirmation. No interactive channel yet -> use ctx policy.
 
@@ -178,8 +208,15 @@ class Orchestrator:
 
     @staticmethod
     def _render_user(assembled: dict[str, Any]) -> str:
-        # Context block (memory/screen) gets prepended here in later phases.
-        return str(assembled.get("request", ""))
+        request = str(assembled.get("request", ""))
+        memory = assembled.get("memory") or []
+        if not memory:
+            return request
+        facts = "\n".join(f"- {m}" for m in memory)
+        return (
+            "Known facts about the user (from memory; use if relevant, ignore if not):\n"
+            f"{facts}\n\nUser request: {request}"
+        )
 
 
 # ── message helpers ──────────────────────────────────────────────────────────

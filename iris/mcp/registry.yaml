@@ -46,11 +46,14 @@ servers:
     description: "BrowserMCP — real logged-in Chrome session via extension."
 
   # ── PHASE 3: memory ───────────────────────────────────────────────────────
+  # Thin MCP server exposing chromadb (the maintained vector DB) as memory tools.
+  # (The PyPI `agentmemory` pkg is incompatible with current chromadb; we use the
+  # same capability via chroma directly — see iris/mcp/servers/agentmemory_server.py)
   agentmemory:
-    enabled: false
+    enabled: true
     transport: stdio
-    command: "npx -y agentmemory serve"
-    description: "Persistent semantic memory store."
+    command: "python -m iris.mcp.servers.agentmemory_server"
+    description: "Persistent semantic memory store (chromadb-backed)."
 
   # ── PHASE 4: communication + calendar ─────────────────────────────────────
   gmail:

@@ -27,6 +27,7 @@ dependencies = [
     "pyyaml>=6.0",
     "mcp>=1.1",
     "mcp-server-fetch>=2025.1.17",  # maintained Python fetch server (websearch)
+    "chromadb>=0.5",                # vector DB behind the agentmemory MCP server
     # ── Observability / logging ───────────────────────────────
     "opentelemetry-sdk>=1.28",
     "structlog>=24.4",

@@ -25,6 +25,9 @@ class RequestContext:
     user_id: str | None = None
     request_id: str | None = None
     bus: "EventBus | None" = None
+    # MemoryStore for recall during context assembly (set by the orchestrator).
+    # Typed as Any to keep the core import-light. Duck-typed: .recall(...).
+    memory: Any = None
     # Confirmation behavior when no interactive channel answers (GOLDEN RULE #6).
     # Default DENY (skip) the gated action — safe by default.
     auto_confirm: bool = False
@@ -36,18 +39,46 @@ class RequestContext:
             await self.bus.publish(event, payload)
 
 
-def assemble(request: str, ctx: RequestContext) -> dict[str, Any]:
+async def assemble(request: str, ctx: RequestContext) -> dict[str, Any]:
     """Assemble the compact, sanitised prompt context for this request.
 
-    For now: session id + the request text. Memory recall and screen context are
-    layered in here in Phase 3 / Phase 7 — always sanitised before returning.
+    Includes a de-duplicated, sanitised block of recalled user memories when a
+    memory store is wired (GOLDEN RULE #5: only sanitised context to Gemini).
+    Screen context is layered in here in Phase 7.
     """
+    memory_block = await _recall_memory(request, ctx)
     return {
         "session_id": ctx.session_id,
         "request": request,
-        # "memory": [...],  # Phase 3
+        "memory": memory_block,  # list[str], already sanitised + deduped
         # "screen": "...",  # Phase 7
     }
+
+
+async def _recall_memory(request: str, ctx: RequestContext, k: int = 8) -> list[str]:
+    """Recall relevant memories, dedupe, and return compact lines.
+
+    Best-effort: memory failures never break a request.
+    """
+    if ctx.memory is None or not getattr(ctx.memory, "available", True):
+        return []
+    try:
+        memories = await ctx.memory.recall(ctx.tenant_id, request, k=k)
+    except Exception as exc:  # noqa: BLE001
+        from structlog import get_logger
+
+        get_logger(__name__).warning("context.recall_failed", error=str(exc))
+        return []
+
+    seen: set[str] = set()
+    lines: list[str] = []
+    for mem in memories:
+        text = (getattr(mem, "text", "") or "").strip()
+        key = text.lower()
+        if text and key not in seen:
+            seen.add(key)
+            lines.append(text)
+    return lines
 
 
 def est_tokens(assembled: dict[str, Any] | str) -> int:

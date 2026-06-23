@@ -16,6 +16,9 @@ venv/
 *.db
 *.sqlite3
 iris.db
+data/chroma/
+data/
+/memory/        # stray chroma store from the agentmemory lib default path
 
 # Sandbox contents (keep the dir, ignore files)
 workspace/*
