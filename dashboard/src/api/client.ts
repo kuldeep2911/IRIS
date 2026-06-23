@@ -33,10 +33,23 @@ export interface UsageReport {
   by_day: { day: string; cost_usd: number; tokens: number }[];
 }
 
-export async function getUsage(): Promise<UsageReport> {
-  const res = await fetch(`${API_BASE}/usage`);
+export async function getUsage(tenantId?: string): Promise<UsageReport> {
+  const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+  const res = await fetch(`${API_BASE}/usage${qs}`);
   if (!res.ok) throw new Error(`usage failed: ${res.status}`);
   return (await res.json()) as UsageReport;
+}
+
+export interface TenantInfo {
+  id: string;
+  name: string;
+  plan: string;
+}
+
+export async function getTenants(): Promise<TenantInfo[]> {
+  const res = await fetch(`${API_BASE}/tenants`);
+  if (!res.ok) throw new Error(`tenants failed: ${res.status}`);
+  return (await res.json()) as TenantInfo[];
 }
 
 export { API_BASE };

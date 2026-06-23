@@ -1,25 +1,66 @@
-// Cost page — reads the usage table (tokens + cost by model + by day).
-// This is the per-tenant billing view (Phase 8.2).
+// Cost page — reads the usage table (tokens + cost by model + by day), with a
+// live per-tenant selector. This is the per-tenant billing view (Phase 8.2).
 import { useEffect, useState } from "react";
-import { getUsage, type UsageReport } from "../api/client";
+import { getTenants, getUsage, type TenantInfo, type UsageReport } from "../api/client";
 
 const usd = (n: number) => `$${n.toFixed(4)}`;
 const num = (n: number) => n.toLocaleString();
 
 export default function Cost() {
+  const [tenants, setTenants] = useState<TenantInfo[]>([]);
+  const [tenant, setTenant] = useState<string>("");
   const [data, setData] = useState<UsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getUsage().then(setData).catch((e) => setError((e as Error).message));
+    getTenants()
+      .then((ts) => {
+        setTenants(ts);
+        if (ts.length && !tenant) setTenant(ts[0].id);
+      })
+      .catch(() => {/* selector is optional */});
   }, []);
 
+  useEffect(() => {
+    setData(null);
+    getUsage(tenant || undefined)
+      .then(setData)
+      .catch((e) => setError((e as Error).message));
+  }, [tenant]);
+
   if (error) return <div className="p-6 text-red-400">Failed to load usage: {error}</div>;
-  if (!data) return <div className="p-6 text-gray-500">Loading usage…</div>;
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-xl font-semibold">Cost &amp; usage</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-xl font-semibold">Cost &amp; usage</h1>
+        {tenants.length > 0 && (
+          <select
+            value={tenant}
+            onChange={(e) => setTenant(e.target.value)}
+            className="ml-auto rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-sm"
+          >
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} ({t.plan})
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {!data ? (
+        <div className="text-gray-500">Loading usage…</div>
+      ) : (
+        <CostBody data={data} />
+      )}
+    </div>
+  );
+}
+
+function CostBody({ data }: { data: UsageReport }) {
+  return (
+    <div className="space-y-6">
 
       <div className="grid grid-cols-3 gap-4">
         <Stat label="Total cost" value={usd(data.totals.cost_usd)} accent />

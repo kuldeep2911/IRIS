@@ -58,6 +58,12 @@ class TenantRepo(_BaseRepo):
         await self.session.flush()
         return tenant
 
+    async def list_all(self) -> list[Tenant]:
+        # The tenants table is THE one legitimately-unscoped query — it lists the
+        # tenants themselves (used by the admin/cost view's tenant selector).
+        q = select(Tenant).order_by(Tenant.created_at)
+        return list((await self.session.execute(q)).scalars().all())
+
 
 class UserRepo(_BaseRepo):
     async def get_or_create_default(self, tenant_id: str) -> User:

@@ -23,6 +23,7 @@ from iris.data.db import init_models, session_scope
 from iris.data.repo import (
     MessageRepo,
     SessionRepo,
+    TenantRepo,
     UsageRepo,
     UserRepo,
     record_usage,
@@ -102,17 +103,24 @@ def create_app() -> FastAPI:
             "mcp": mcp.health() if mcp else {},
         }
 
+    @app.get("/tenants")
+    async def tenants() -> list[dict]:
+        """List tenants (for the Cost page tenant selector / per-tenant billing)."""
+        async with session_scope() as s:
+            rows = await TenantRepo(s).list_all()
+            return [{"id": t.id, "name": t.name, "plan": t.plan} for t in rows]
+
     @app.get("/usage")
-    async def usage(request: Request) -> dict:
-        """Cost/usage aggregates for the current tenant (Cost page data source)."""
-        tenant_id = request.state.tenant_id
+    async def usage(request: Request, tenant_id: str | None = None) -> dict:
+        """Cost/usage aggregates for a tenant (defaults to the request's tenant)."""
+        tid = tenant_id or request.state.tenant_id
         async with session_scope() as s:
             repo = UsageRepo(s)
             return {
-                "tenant_id": tenant_id,
-                "totals": await repo.totals(tenant_id),
-                "by_model": await repo.by_model(tenant_id),
-                "by_day": await repo.by_day(tenant_id),
+                "tenant_id": tid,
+                "totals": await repo.totals(tid),
+                "by_model": await repo.by_model(tid),
+                "by_day": await repo.by_day(tid),
             }
 
     @app.post("/chat", response_model=ChatResponse)

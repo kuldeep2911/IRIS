@@ -22,6 +22,7 @@ dependencies = [
     # ── Data ──────────────────────────────────────────────────
     "sqlalchemy>=2.0",
     "aiosqlite>=0.20",
+    "asyncpg>=0.30",            # Postgres async driver (docker-compose path)
     "redis>=5.2",
     # ── Config / MCP ──────────────────────────────────────────
     "pyyaml>=6.0",
