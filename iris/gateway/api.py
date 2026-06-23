@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from iris import __version__
@@ -93,6 +94,16 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="I.R.I.S.", version=__version__, lifespan=lifespan)
     app.add_middleware(TenantMiddleware)
+    # CORS so the React dashboard (Vite :5173) can call the API in local dev.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173", "http://127.0.0.1:5173",
+            "http://localhost:4173", "http://127.0.0.1:4173",
+        ],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     register_ws(app)  # /ws live Agent Monitor stream
     app.include_router(connectors_router)  # /connectors + OAuth callback
 
