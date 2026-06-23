@@ -1,29 +1,30 @@
-"""FastAPI gateway — the smallest end-to-end path: HTTP -> router -> Gemini.
+"""FastAPI gateway — HTTP -> orchestrator (route -> MCP tools -> Gemini) -> reply.
 
-STEP 0.4: ``POST /chat`` classifies the message, lets the router pick the
-cheapest capable model, calls Gemini, and returns the reply + model + usage +
-request_class. No memory or MCP yet (Phase 1+). The core stays STATELESS — no
-per-request state is held at module scope; ``session_id`` is echoed through.
-
-In STEP 1.2 the direct Gemini call here is replaced by ``Orchestrator.handle``.
+STEP 1.2: ``POST /chat`` now runs the stateless :class:`Orchestrator`, which can
+call MCP tools (filesystem, web fetch) before answering. The MCP host is
+connected once at app startup (lifespan) and shared, read-only, across requests
+— the core stays stateless (per-request state is the ``RequestContext`` value).
 """
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
+import structlog
 from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
 
 from iris import __version__
+from iris.core.context import RequestContext
 from iris.core.events import EventBus
+from iris.core.orchestrator import Orchestrator
+from iris.data.db import init_models, session_scope
+from iris.data.repo import MessageRepo, SessionRepo, UserRepo, record_usage, seed_defaults
 from iris.gateway.middleware import TenantMiddleware
 from iris.llm import get_llm
-from iris.router.model_router import classify, model_for
+from iris.mcp.host import MCPHost
 
-SYSTEM_PROMPT = (
-    "You are I.R.I.S. (Intelligent Responsive Intelligence System), a concise, "
-    "capable personal AI assistant. Answer directly and helpfully. If you don't "
-    "know something, say so plainly."
-)
+log = structlog.get_logger(__name__)
 
 
 # ── request / response models ────────────────────────────────────────────────
@@ -43,61 +44,92 @@ class ChatResponse(BaseModel):
     model: str
     usage: UsageOut
     request_class: str
+    steps: int
     session_id: str | None = None
+
+
+# ── lifespan: connect the MCP mesh once, tear down on shutdown ────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Data layer: create tables + seed the default tenant/user.
+    await init_models()
+    tenant_id, user_id = await seed_defaults()
+    log.info("data.ready", tenant_id=tenant_id)
+
+    bus = EventBus()
+    mcp = MCPHost()
+    health = await mcp.connect_all()
+    log.info("mcp.host_ready", health=health)
+
+    app.state.event_bus = bus
+    app.state.mcp = mcp
+    app.state.default_user_id = user_id
+    # Usage rows are written per LLM call via the sink (tenant from contextvar).
+    app.state.orchestrator = Orchestrator(llm=get_llm(usage_sink=record_usage), mcp=mcp)
+    try:
+        yield
+    finally:
+        await mcp.aclose()
 
 
 # ── app factory ──────────────────────────────────────────────────────────────
 def create_app() -> FastAPI:
-    """Build the FastAPI app. A factory keeps construction explicit/testable."""
-    app = FastAPI(title="I.R.I.S.", version=__version__)
+    app = FastAPI(title="I.R.I.S.", version=__version__, lifespan=lifespan)
     app.add_middleware(TenantMiddleware)
 
-    # One event bus per app instance (not module-global mutable state).
-    app.state.event_bus = EventBus()
-
     @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
+    async def health(request: Request) -> dict:
+        mcp: MCPHost | None = getattr(request.app.state, "mcp", None)
+        return {
+            "status": "ok",
+            "version": __version__,
+            "mcp": mcp.health() if mcp else {},
+        }
 
     @app.post("/chat", response_model=ChatResponse)
     async def chat(req: ChatRequest, request: Request) -> ChatResponse:
+        orchestrator: Orchestrator = request.app.state.orchestrator
         tenant_id = request.state.tenant_id
-        bus: EventBus = app.state.event_bus
+        user_id = getattr(request.app.state, "default_user_id", None)
 
-        # Route: cheapest capable model for this request.
-        rc = classify(req.message)
-        choice = model_for(rc)
+        # Ensure a session row, then persist the user turn (tenant-scoped).
+        async with session_scope() as s:
+            sess = await SessionRepo(s).get_or_create(tenant_id, req.session_id, user_id)
+            session_id = sess.id
+            await MessageRepo(s).add(tenant_id, session_id, "user", req.message)
 
-        await bus.publish(
-            "chat_received",
-            {"tenant_id": tenant_id, "session_id": req.session_id, "request_class": rc.name},
+        ctx = RequestContext(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            user_id=user_id,
+            request_id=getattr(request.state, "request_id", None),
+            bus=request.app.state.event_bus,
         )
+        result = await orchestrator.handle(req.message, ctx)
 
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": req.message},
-        ]
-        resp = await get_llm().complete(
-            choice.model,
-            messages,
-            max_output_tokens=choice.max_output_tokens,
-        )
-
-        await bus.publish(
-            "chat_answered",
-            {"tenant_id": tenant_id, "model": resp.model, "total_tok": resp.usage.total_tok},
-        )
+        # Persist the assistant turn with model + output tokens.
+        async with session_scope() as s:
+            await MessageRepo(s).add(
+                tenant_id,
+                session_id,
+                "assistant",
+                result.text,
+                model=result.model,
+                input_tok=result.usage.input_tok,
+                output_tok=result.usage.output_tok,
+            )
 
         return ChatResponse(
-            reply=resp.text,
-            model=resp.model,
+            reply=result.text,
+            model=result.model,
             usage=UsageOut(
-                input_tok=resp.usage.input_tok,
-                output_tok=resp.usage.output_tok,
-                total_tok=resp.usage.total_tok,
+                input_tok=result.usage.input_tok,
+                output_tok=result.usage.output_tok,
+                total_tok=result.usage.total_tok,
             ),
-            request_class=rc.name,
-            session_id=req.session_id,
+            request_class=result.request_class,
+            steps=result.steps,
+            session_id=session_id,
         )
 
     return app

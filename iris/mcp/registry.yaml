@@ -10,16 +10,19 @@
 servers:
   # ── PHASE 1: safe servers first ──────────────────────────────────────────
   filesystem:
-    enabled: false            # enabled in STEP 1.1
+    enabled: true             # enabled in STEP 1.1
     transport: stdio
     command: "npx -y @modelcontextprotocol/server-filesystem ./workspace"
     description: "Sandboxed file read/write, restricted to ./workspace."
 
   websearch:
-    enabled: false            # enabled in STEP 1.1
+    enabled: true             # enabled in STEP 1.1
     transport: stdio
-    command: "npx -y mcp-server-fetch"
-    description: "Web search / fetch."
+    # mcp-server-fetch is the maintained Python fetch server (URL fetch +
+    # HTML->markdown). Run as a module; `pip install mcp-server-fetch` (a dep).
+    # (Canonically `uvx mcp-server-fetch` if you use uv.)
+    command: "python -m mcp_server_fetch --ignore-robots-txt"
+    description: "Web fetch (URL -> markdown) for research/search tasks."
 
   # ── PHASE 2: browser mesh (picked per task by mcp/browser_router.py) ──────
   browser_use:

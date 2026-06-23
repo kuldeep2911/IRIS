@@ -26,6 +26,7 @@ dependencies = [
     # ── Config / MCP ──────────────────────────────────────────
     "pyyaml>=6.0",
     "mcp>=1.1",
+    "mcp-server-fetch>=2025.1.17",  # maintained Python fetch server (websearch)
     # ── Observability / logging ───────────────────────────────
     "opentelemetry-sdk>=1.28",
     "structlog>=24.4",

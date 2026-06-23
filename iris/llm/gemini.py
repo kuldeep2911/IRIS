@@ -208,7 +208,7 @@ class GeminiClient(LLMClient):
             types.FunctionDeclaration(
                 name=t["name"],
                 description=t.get("description", ""),
-                parameters=t.get("parameters") or t.get("input_schema"),
+                parameters=_sanitize_schema(t.get("parameters") or t.get("input_schema")),
             )
             for t in tools
         ]
@@ -284,3 +284,40 @@ def _backoff_delay(attempt: int, base: float = 0.5, cap: float = 8.0) -> float:
 
 def _as_response_dict(content: Any) -> dict[str, Any]:
     return content if isinstance(content, dict) else {"result": content}
+
+
+# JSON-schema keys Gemini's function-calling accepts; everything else (e.g.
+# "$schema", "additionalProperties", "title", "default") triggers a 400 and is
+# stripped so raw MCP inputSchemas can be passed straight through.
+_ALLOWED_SCHEMA_KEYS = frozenset(
+    {
+        "type", "format", "description", "nullable", "enum", "items",
+        "properties", "required", "anyOf", "minimum", "maximum",
+        "minItems", "maxItems", "minLength", "maxLength", "pattern",
+    }
+)
+
+
+def _sanitize_schema(schema: Any) -> Any:
+    """Recursively keep only Gemini-supported JSON-schema keys.
+
+    Returns ``None`` for an object schema with no usable properties so no-arg
+    tools declare cleanly instead of sending an empty object.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    clean: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key not in _ALLOWED_SCHEMA_KEYS:
+            continue
+        if key == "properties" and isinstance(value, dict):
+            clean[key] = {k: _sanitize_schema(v) for k, v in value.items()}
+        elif key in ("items",):
+            clean[key] = _sanitize_schema(value)
+        elif key == "anyOf" and isinstance(value, list):
+            clean[key] = [_sanitize_schema(v) for v in value]
+        else:
+            clean[key] = value
+    if clean.get("type") == "object" and not clean.get("properties"):
+        return None
+    return clean

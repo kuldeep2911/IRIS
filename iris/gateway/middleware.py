@@ -20,6 +20,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from iris.config.settings import get_settings
+from iris.data.db import current_tenant_id
 
 log = structlog.get_logger(__name__)
 
@@ -47,7 +48,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         request.state.tenant_id = tenant_id
 
-        # Bind to the structlog context for this request's log lines.
+        # Bind tenant for the in-flight request (used by the usage sink) + logs.
+        token = current_tenant_id.set(tenant_id)
         structlog.contextvars.bind_contextvars(
             request_id=request_id, tenant_id=tenant_id
         )
@@ -55,6 +57,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
         finally:
             structlog.contextvars.clear_contextvars()
+            current_tenant_id.reset(token)
 
         response.headers[REQUEST_ID_HEADER] = request_id
         response.headers[TENANT_ID_HEADER] = tenant_id

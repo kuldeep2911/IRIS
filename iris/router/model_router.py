@@ -147,6 +147,30 @@ def classify(
     return RequestClass.STANDARD
 
 
+@dataclass(frozen=True)
+class ModelPrice:
+    """USD per 1M tokens (input, output) — used to cost usage rows."""
+
+    input_per_1m: float
+    output_per_1m: float
+
+
+# Pricing lives here too: keyed by model id, so model ids stay in ONE file.
+PRICE_MAP: dict[str, ModelPrice] = {
+    "gemini-2.5-flash-lite": ModelPrice(0.10, 0.40),
+    "gemini-2.5-flash": ModelPrice(0.30, 2.50),
+    "gemini-3.1-pro": ModelPrice(2.00, 12.00),
+}
+
+
+def cost_usd(model: str, input_tok: int, output_tok: int) -> float:
+    """Compute the USD cost of a call. Unknown model -> 0.0 (no guess)."""
+    price = PRICE_MAP.get(model)
+    if price is None:
+        return 0.0
+    return input_tok / 1_000_000 * price.input_per_1m + output_tok / 1_000_000 * price.output_per_1m
+
+
 def model_for(rc: RequestClass) -> ModelChoice:
     """Map a RequestClass to its concrete ModelChoice (the only model-id exit)."""
     choice = MODEL_MAP[rc]
