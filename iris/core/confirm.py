@@ -12,12 +12,19 @@ Later phases extend the explicit sets (e.g. ``email_send``, ``calendar_delete``,
 from __future__ import annotations
 
 # Substrings that mark an action needing confirmation.
+# Includes browser submission verbs (send/submit/post) so any browser action
+# that submits a form or sends a message is gated (Phase 2.2).
 _CONFIRM_KEYWORDS: tuple[str, ...] = (
-    "send", "delete", "publish", "post", "remove", "destroy", "drop",
+    "send", "submit", "delete", "publish", "post", "remove", "destroy", "drop",
 )
 
-# Explicit tool names that always require confirmation (filled in later phases).
-_CONFIRM_TOOLS: frozenset[str] = frozenset()
+# Explicit tool names that always require confirmation (extended per phase).
+# Browser submit/login-commit tools land here as the servers expose them.
+_CONFIRM_TOOLS: frozenset[str] = frozenset(
+    {
+        "browser_file_upload",   # uploading a file is an outward action
+    }
+)
 
 # Payment / purchase signals — HARD-BLOCKED (GOLDEN RULE #7).
 _PAYMENT_KEYWORDS: tuple[str, ...] = (

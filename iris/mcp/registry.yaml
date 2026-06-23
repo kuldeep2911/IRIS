@@ -25,20 +25,22 @@ servers:
     description: "Web fetch (URL -> markdown) for research/search tasks."
 
   # ── PHASE 2: browser mesh (picked per task by mcp/browser_router.py) ──────
+  # browser_use + browser_mcp are SSE servers you start separately (see README);
+  # if not running they are simply marked down (the host isolates failures).
   browser_use:
-    enabled: false
+    enabled: true
     transport: sse
     url: "http://localhost:7801/sse"
     description: "browser-use MCP — AI-driven browsing for unknown pages."
 
   playwright:
-    enabled: false
+    enabled: true
     transport: stdio
     command: "npx -y @playwright/mcp@latest"
     description: "Playwright MCP — deterministic, accessibility-tree driven."
 
   browser_mcp:
-    enabled: false
+    enabled: true
     transport: sse
     url: "http://localhost:7802/sse"
     description: "BrowserMCP — real logged-in Chrome session via extension."

@@ -37,6 +37,41 @@ MCP servers (browser, memory, desktop, gmail, calendar) mostly run on the host
 and are reached over stdio / localhost SSE — declared in
 [`iris/mcp/registry.yaml`](iris/mcp/registry.yaml) and enabled per phase.
 
+## Browser mesh (Phase 2)
+
+IRIS never hand-rolls browser automation — it uses three maintained MCP servers
+and picks the right one per task ([`iris/mcp/browser_router.py`](iris/mcp/browser_router.py)):
+
+| Server         | Transport            | Use for                                            |
+|----------------|----------------------|----------------------------------------------------|
+| `playwright`   | stdio (auto via npx) | deterministic, structured form/flows               |
+| `browser_use`  | SSE `:7801`          | AI-driven reasoning over unknown pages             |
+| `browser_mcp`  | SSE `:7802`          | the **real, logged-in Chrome** session             |
+
+`playwright` starts automatically (`npx -y @playwright/mcp@latest`); the first
+run downloads the server (and `npx playwright install chromium` for the browser
+binary). The other two you start yourself:
+
+```bash
+# browser-use MCP (AI-driven) on :7801 — see https://github.com/browser-use/browser-use
+uvx 'browser-use[cli]' --mcp --port 7801          # or the project's documented launch cmd
+
+# BrowserMCP (real Chrome): install the "Browser MCP" Chrome extension, then run
+# its bridge so the SSE endpoint is served on :7802 (see https://browsermcp.io).
+```
+
+**Reuse your logins:** set `BROWSER_USER_DATA_DIR` in `.env` to your real Chrome
+profile path so authenticated sessions (Gmail/WhatsApp/etc.) are reused by the
+browser servers — IRIS never stores site passwords itself.
+
+```env
+# Windows example
+BROWSER_USER_DATA_DIR=C:\Users\<you>\AppData\Local\Google\Chrome\User Data
+```
+
+If a browser server isn't running it's simply marked **down** (the host isolates
+failures); `playwright` alone is enough for search + structured form tasks.
+
 ## Make targets
 
 | Target          | Does                                                    |

@@ -208,7 +208,7 @@ class GeminiClient(LLMClient):
             types.FunctionDeclaration(
                 name=t["name"],
                 description=t.get("description", ""),
-                parameters=_sanitize_schema(t.get("parameters") or t.get("input_schema")),
+                parameters=_top_level_params(t.get("parameters") or t.get("input_schema")),
             )
             for t in tools
         ]
@@ -286,38 +286,66 @@ def _as_response_dict(content: Any) -> dict[str, Any]:
     return content if isinstance(content, dict) else {"result": content}
 
 
-# JSON-schema keys Gemini's function-calling accepts; everything else (e.g.
-# "$schema", "additionalProperties", "title", "default") triggers a 400 and is
-# stripped so raw MCP inputSchemas can be passed straight through.
-_ALLOWED_SCHEMA_KEYS = frozenset(
-    {
-        "type", "format", "description", "nullable", "enum", "items",
-        "properties", "required", "anyOf", "minimum", "maximum",
-        "minItems", "maxItems", "minLength", "maxLength", "pattern",
-    }
-)
+_SCALAR_TYPES = frozenset({"string", "integer", "number", "boolean"})
+# Scalar-level keys worth carrying through to Gemini.
+_KEEP_KEYS = ("description", "enum", "format")
 
 
-def _sanitize_schema(schema: Any) -> Any:
-    """Recursively keep only Gemini-supported JSON-schema keys.
+def _top_level_params(schema: Any) -> Any:
+    """Sanitize a tool's top-level parameters; ``None`` for no-arg tools.
 
-    Returns ``None`` for an object schema with no usable properties so no-arg
-    tools declare cleanly instead of sending an empty object.
+    Gemini rejects an object schema with no properties at the top level, so a
+    free-form / empty top-level schema becomes ``None`` (declares as no-arg).
+    """
+    cleaned = _clean_schema(schema)
+    if cleaned.get("type") == "object" and cleaned.get("properties"):
+        return cleaned
+    return None
+
+
+def _clean_schema(schema: Any) -> dict[str, Any]:
+    """Recursively produce a Gemini-VALID schema for any JSON-schema input.
+
+    Guarantees every node is a typed schema (unsupported keys dropped, free-form
+    objects -> string, arrays get items, unknown -> string) so raw MCP
+    inputSchemas never crash FunctionDeclaration.
     """
     if not isinstance(schema, dict):
-        return schema
-    clean: dict[str, Any] = {}
-    for key, value in schema.items():
-        if key not in _ALLOWED_SCHEMA_KEYS:
-            continue
-        if key == "properties" and isinstance(value, dict):
-            clean[key] = {k: _sanitize_schema(v) for k, v in value.items()}
-        elif key in ("items",):
-            clean[key] = _sanitize_schema(value)
-        elif key == "anyOf" and isinstance(value, list):
-            clean[key] = [_sanitize_schema(v) for v in value]
-        else:
-            clean[key] = value
-    if clean.get("type") == "object" and not clean.get("properties"):
-        return None
-    return clean
+        return {"type": "string"}
+
+    if "anyOf" in schema and isinstance(schema["anyOf"], list) and schema["anyOf"]:
+        return _clean_schema(schema["anyOf"][0])
+
+    out: dict[str, Any] = {}
+    for k in _KEEP_KEYS:
+        if k in schema:
+            out[k] = schema[k]
+
+    t = schema.get("type")
+    if t == "object" or "properties" in schema:
+        props = schema.get("properties") or {}
+        cleaned = {k: _clean_schema(v) for k, v in props.items()} if isinstance(props, dict) else {}
+        if cleaned:
+            out["type"] = "object"
+            out["properties"] = cleaned
+            required = [r for r in (schema.get("required") or []) if r in cleaned]
+            if required:
+                out["required"] = required
+            return out
+        # free-form / empty object -> represent as a JSON string
+        out["type"] = "string"
+        out.setdefault("description", "JSON object as a string")
+        return out
+
+    if t == "array":
+        out["type"] = "array"
+        out["items"] = _clean_schema(schema.get("items") or {"type": "string"})
+        return out
+
+    if t in _SCALAR_TYPES:
+        out["type"] = t
+        return out
+
+    # missing / unknown type -> safe default
+    out["type"] = "string"
+    return out

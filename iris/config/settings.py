@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     # ── Filesystem sandbox (filesystem/shell MCP may only touch this) ─────
     WORKSPACE_DIR: str = "./workspace"
 
+    # ── Browser mesh (Phase 2) ────────────────────────────────────────────
+    # Real Chrome profile dir so logged-in sessions (Gmail/WhatsApp/etc) are
+    # reused by the browser MCP servers. Empty -> servers use their own profile.
+    BROWSER_USER_DATA_DIR: str | None = None
+    BROWSER_USE_SSE_URL: str = "http://localhost:7801/sse"
+    BROWSER_MCP_SSE_URL: str = "http://localhost:7802/sse"
+
     @property
     def is_prod(self) -> bool:
         return self.ENV == "prod"

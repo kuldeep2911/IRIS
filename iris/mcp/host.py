@@ -119,9 +119,13 @@ class MCPHost:
             params = StdioServerParameters(command=command, args=args)
             read, write = await self._stack.enter_async_context(stdio_client(params))
         elif transport == "sse":
+            url = cfg["url"]
+            # Fast fail if nothing is listening (browser_use/browser_mcp may be
+            # off) so we don't block on the full connect timeout.
+            await _assert_reachable(url)
             from mcp.client.sse import sse_client
 
-            read, write = await self._stack.enter_async_context(sse_client(cfg["url"]))
+            read, write = await self._stack.enter_async_context(sse_client(url))
         else:
             raise ValueError(f"Unknown transport '{transport}' for server '{name}'.")
 
@@ -146,6 +150,20 @@ class MCPHost:
                     "parameters": tool.inputSchema or {"type": "object", "properties": {}},
                 }
             )
+
+
+async def _assert_reachable(url: str, timeout: float = 2.0) -> None:
+    """Quick TCP check so a down SSE server fails fast (not on the long timeout)."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
+        writer.close()
+    except Exception as exc:  # noqa: BLE001
+        raise ConnectionError(f"{host}:{port} not reachable ({exc})") from exc
 
 
 def _content_to_text(content: Any) -> str:

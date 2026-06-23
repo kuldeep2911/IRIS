@@ -23,6 +23,9 @@ from iris.data.repo import MessageRepo, SessionRepo, UserRepo, record_usage, see
 from iris.gateway.middleware import TenantMiddleware
 from iris.llm import get_llm
 from iris.mcp.host import MCPHost
+from iris.security.redaction import configure_logging
+
+configure_logging()  # install the redaction-aware structlog pipeline early
 
 log = structlog.get_logger(__name__)
 
