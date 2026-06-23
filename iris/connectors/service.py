@@ -116,6 +116,29 @@ class ConnectorService:
         # pat / api_key: the stored token IS the credential (no refresh)
         return self._vault.get_tokens(conn.credentials_ref).access_token
 
+    async def ensure_fresh(self, connector_id: str) -> str:
+        """Guarantee a running connector server has a VALID token before use.
+
+        Refreshes an expired OAuth token (via the vault) and, if the token
+        changed, restarts the server with the new token (servers read the token
+        at startup). Raises ReconnectRequired if the connection is gone/revoked.
+        """
+        async with session_scope() as s:
+            conn = await ConnectionRepo(s).get_connection(
+                self._tenant_id, self._user_id, connector_id
+            )
+            if conn is None or not conn.credentials_ref:
+                raise ReconnectRequired(f"{connector_id}: not connected")
+            s.expunge(conn)
+        token = await self.token_for(connector_id)
+        if self._mcp is not None and hasattr(self._mcp, "connector_started_token"):
+            started = self._mcp.connector_started_token(
+                self._tenant_id, self._user_id, connector_id
+            )
+            if started is not None and started != token:
+                await self._mcp.start_connector_server(conn, token)  # restart w/ fresh token
+        return token
+
     async def status(self, connector_id: str) -> dict:
         async with session_scope() as s:
             conn = await ConnectionRepo(s).get_connection(

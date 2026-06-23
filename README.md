@@ -192,6 +192,38 @@ own flag (`PROACTIVE_MEETING_ALERTS`, `PROACTIVE_EMAIL_ALERTS`,
 `PROACTIVE_DAILY_BRIEFING`, all default off). Nothing is scheduled unless enabled.
 Needs `pip install -e ".[proactive]"`.
 
+## Connectors (Phase 9)
+
+Connect 20+ third-party apps from the **Connections page** — each is a catalog
+entry ([`iris/connectors/catalog.yaml`](iris/connectors/catalog.yaml)) pointing at
+a maintained MCP server + an auth spec. Connecting runs OAuth2 (auth-code + PKCE +
+refresh) or stores a PAT/API key **encrypted in the OS keychain** (never in db,
+logs, `.env`, or code), then starts that connector's MCP server with the token
+injected so its tools reach the brain at runtime — per user, tenant-scoped.
+
+**OAuth setup (one-time per provider):**
+1. Register the **exact** redirect URI in the provider's OAuth app:
+   `http://localhost:8000/connectors/callback` (scheme/host/port/path must match).
+2. Put the app's client id/secret in `.env` using the env-var names from the
+   catalog, e.g. `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (one Google app
+   serves gmail + gcalendar + drive), `SLACK_CLIENT_ID/SECRET`,
+   `ATLASSIAN_CLIENT_ID/SECRET`, `NOTION_CLIENT_ID/SECRET`.
+3. Google issues a **refresh token only** with `access_type=offline` +
+   `prompt=consent` — already set in the catalog.
+
+**Smoke (run for gmail / github / slack / notion):** open Connections → **Connect**
+→ complete consent in the popup → the card flips to connected with your account
+label. In chat: *"Summarise my 3 most recent unread emails"* (read-only summaries);
+*"Send a test email to myself"* triggers a **confirmation** before sending. PAT
+connectors (GitHub/Vercel/…) open a token modal with a "where do I get this?" link
+and validate the token on connect.
+
+**Security:** tokens AES-256 + keychain (`token_vault.py`), redacted from logs,
+auto-refreshed (revoked → friendly "reconnect" prompt), every connection
+tenant+user scoped, confirm gate on each connector's `confirm_tools`, and
+**payments hard-blocked** (Stripe/AWS) regardless of confirmation. Verify with
+`python scripts/audit_connectors.py`.
+
 ## Make targets
 
 | Target          | Does                                                    |

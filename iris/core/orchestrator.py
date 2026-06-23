@@ -62,11 +62,18 @@ _SYSTEM_PROMPT_TMPL = (
 )
 
 
-def _system_prompt() -> str:
+def _system_prompt(connected_apps: list[str] | None = None) -> str:
     from pathlib import Path
 
     workspace = str(Path(get_settings().WORKSPACE_DIR).resolve())
-    return _SYSTEM_PROMPT_TMPL.format(workspace=workspace)
+    prompt = _SYSTEM_PROMPT_TMPL.format(workspace=workspace)
+    if connected_apps:
+        prompt += (
+            "\nCONNECTED APPS (use their tools when relevant): "
+            + ", ".join(sorted(connected_apps))
+            + "."
+        )
+    return prompt
 
 
 @dataclass
@@ -107,11 +114,17 @@ class Orchestrator:
 
         choice = model_for(rc)
 
+        # Per-user tools = CORE tools + this user's connected connector tools.
+        connected = self._mcp.running_connectors(ctx.tenant_id, ctx.user_id) \
+            if hasattr(self._mcp, "running_connectors") else []
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _system_prompt()},
+            {"role": "system", "content": _system_prompt(connected)},
             {"role": "user", "content": self._render_user(assembled)},
         ]
-        tools = self._mcp.schemas()
+        tools = (
+            self._mcp.schemas_for_user(ctx.tenant_id, ctx.user_id)
+            if hasattr(self._mcp, "schemas_for_user") else self._mcp.schemas()
+        )
 
         total_usage = Usage()
         executed: list[dict[str, Any]] = []
@@ -277,15 +290,31 @@ class Orchestrator:
             await self._emit_tool(ctx, "blocked", call.name, "blocked", "payment")
             return "ERROR: payment/purchase actions are hard-blocked and will not be executed."
 
+        server = self._mcp.server_for(call.name)
+        is_connector = bool(server and str(server).startswith("conn:"))
+        connector_id = str(server).split(":")[-1] if is_connector else None
+
         # Sandbox: filesystem/shell calls must stay inside ./workspace.
         try:
-            validate_tool_call(call.name, call.args, server=self._mcp.server_for(call.name))
+            validate_tool_call(call.name, call.args, server=server)
         except SandboxViolation as exc:
             await self._emit_tool(ctx, "blocked", call.name, "blocked", f"sandbox: {exc}")
             return f"ERROR: blocked by sandbox: {exc}"
 
-        # GOLDEN RULE #6: gate outward/destructive actions on confirmation.
-        if needs_confirmation(call.name):
+        # Connector token freshness: refresh an expired OAuth token transparently
+        # (restart the server with it if it changed); ReconnectRequired -> friendly msg.
+        if is_connector:
+            reconnect = await self._ensure_connector_fresh(ctx, connector_id, call.name)
+            if reconnect is not None:
+                return reconnect
+
+        # GOLDEN RULE #6: gate outward/destructive actions on confirmation —
+        # includes each connected connector's declared confirm_tools.
+        connector_confirm = (
+            self._mcp.connector_confirm_tools(ctx.tenant_id, ctx.user_id)
+            if hasattr(self._mcp, "connector_confirm_tools") else set()
+        )
+        if needs_confirmation(call.name) or call.name in connector_confirm:
             await self._emit_tool(ctx, "confirm_request", call.name, "confirm", "awaiting approval")
             if not await self._wait_or_autoskip(ctx, call):
                 await self._emit_tool(ctx, "tool_result", call.name, "denied", "not confirmed")
@@ -296,19 +325,42 @@ class Orchestrator:
             # Privacy gate: strip raw email/chat bodies to summaries before the
             # result enters the prompt context (GOLDEN RULE #5).
             result = summarise_tool_output(call.name, result)
-            await self._emit_tool(ctx, "tool_result", call.name, "ok", call.name)
+            # Audited via actions_audit (security/audit.py subscriber) — connector
+            # tool calls carry the connector id; raw tokens/payloads never logged.
+            await self._emit_tool(ctx, "tool_result", call.name, "ok", call.name, connector_id)
             return result
         except ToolError as exc:
             log.warning("orchestrator.tool_error", tool=call.name, error=str(exc))
-            await self._emit_tool(ctx, "tool_result", call.name, "error", f"{call.name}: {exc}")
+            await self._emit_tool(ctx, "tool_result", call.name, "error", f"{call.name}: {exc}",
+                                  connector_id)
             # Feed the error back so the model can try an alternative approach.
             return f"ERROR: {exc}"
 
+    async def _ensure_connector_fresh(
+        self, ctx: RequestContext, connector_id: str, tool: str
+    ) -> str | None:
+        """Refresh a connector's token before use; return a reconnect message if revoked."""
+        from iris.connectors.oauth import ReconnectRequired
+        from iris.connectors.service import ConnectorService
+
+        try:
+            await ConnectorService(ctx.tenant_id, ctx.user_id, mcp=self._mcp).ensure_fresh(connector_id)
+            return None
+        except ReconnectRequired:
+            await self._emit_tool(ctx, "tool_result", tool, "error", "reconnect", connector_id)
+            await ctx.emit("reconnect_required", {
+                "type": "reconnect_required", "connector": connector_id,
+                "tenant_id": ctx.tenant_id, "session_id": ctx.session_id,
+            })
+            return (f"I need you to reconnect **{connector_id}** in the Connections page — "
+                    "its access expired or was revoked.")
+
     async def _emit_tool(self, ctx: RequestContext, event: str, tool: str,
-                         status: str, summary: str) -> None:
+                         status: str, summary: str, connector_id: str | None = None) -> None:
         await ctx.emit(event, {
             "type": event, "agent_name": "iris", "tool": tool, "status": status,
-            "summary": summary, "tenant_id": ctx.tenant_id, "session_id": ctx.session_id,
+            "summary": summary, "connector_id": connector_id,
+            "tenant_id": ctx.tenant_id, "session_id": ctx.session_id,
         })
 
     def _schedule_learn(self, ctx: RequestContext, request: str, reply: str) -> None:

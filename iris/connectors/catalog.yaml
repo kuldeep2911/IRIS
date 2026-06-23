@@ -1,7 +1,11 @@
-# Connector catalog — DATA, not code. Each entry declares everything needed to
-# connect an app and run its MCP server. Adding a connector = adding an entry.
-# (Step 9.1 seeds gmail (oauth2) + github (pat); the full 20 land in Step 9.7.)
+# Connector catalog — DATA, not code. Each entry points at a MAINTAINED MCP
+# server + an auth spec. Adding a connector = adding an entry (no code change).
+# The 3 Google connectors reuse ONE Google OAuth app (GOOGLE_CLIENT_ID/SECRET),
+# differing only by scope, with access_type=offline + prompt=consent so a
+# refresh_token is issued. MCP package names are noted per entry; verify the
+# exact package/version for your environment.
 
+# ─────────────────────────── COMMUNICATION ────────────────────────────────
 gmail:
   name: "Gmail"
   category: "communication"
@@ -14,22 +18,78 @@ gmail:
       - "https://www.googleapis.com/auth/gmail.modify"
       - "https://www.googleapis.com/auth/userinfo.email"
     pkce: true
-    # Google ONLY returns a refresh_token when these are set on first consent.
-    extra_authorize_params:
-      access_type: "offline"
-      prompt: "consent"
+    extra_authorize_params: { access_type: "offline", prompt: "consent" }
     client_id_env: "GOOGLE_CLIENT_ID"
     client_secret_env: "GOOGLE_CLIENT_SECRET"
     userinfo_url: "https://www.googleapis.com/oauth2/v2/userinfo"
     account_field: "email"
-  mcp:
-    # Maintained Gmail MCP server: @gongrzhe/server-gmail-autoauth-mcp
+  mcp:   # @gongrzhe/server-gmail-autoauth-mcp
     transport: "stdio"
     command: "npx -y @gongrzhe/server-gmail-autoauth-mcp"
     token_injection: "env"
     token_env_var: "GMAIL_OAUTH_TOKEN"
   confirm_tools: ["send_email"]
 
+gcalendar:
+  name: "Google Calendar"
+  category: "productivity"
+  icon: "tabler:calendar"
+  auth:
+    type: "oauth2"
+    authorize_url: "https://accounts.google.com/o/oauth2/v2/auth"
+    token_url: "https://oauth2.googleapis.com/token"
+    scopes:
+      - "https://www.googleapis.com/auth/calendar.events"
+      - "https://www.googleapis.com/auth/userinfo.email"
+    pkce: true
+    extra_authorize_params: { access_type: "offline", prompt: "consent" }
+    client_id_env: "GOOGLE_CLIENT_ID"
+    client_secret_env: "GOOGLE_CLIENT_SECRET"
+    userinfo_url: "https://www.googleapis.com/oauth2/v2/userinfo"
+    account_field: "email"
+  mcp:   # @cocal/google-calendar-mcp
+    transport: "stdio"
+    command: "npx -y @cocal/google-calendar-mcp"
+    token_injection: "env"
+    token_env_var: "GCAL_OAUTH_TOKEN"
+  confirm_tools: ["delete_event"]
+
+slack:
+  name: "Slack"
+  category: "communication"
+  icon: "tabler:brand-slack"
+  auth:
+    type: "oauth2"
+    authorize_url: "https://slack.com/oauth/v2/authorize"
+    token_url: "https://slack.com/api/oauth.v2.access"
+    scopes: ["channels:read", "chat:write", "users:read"]
+    scope_separator: ","
+    pkce: false
+    client_id_env: "SLACK_CLIENT_ID"
+    client_secret_env: "SLACK_CLIENT_SECRET"
+  mcp:   # @modelcontextprotocol/server-slack
+    transport: "stdio"
+    command: "npx -y @modelcontextprotocol/server-slack"
+    token_injection: "env"
+    token_env_var: "SLACK_BOT_TOKEN"
+  confirm_tools: ["post_message", "slack_post_message"]
+
+discord:
+  name: "Discord"
+  category: "communication"
+  icon: "tabler:brand-discord"
+  auth:
+    type: "pat"
+    help_url: "https://discord.com/developers/applications"
+    token_label: "Bot Token"
+  mcp:   # community: mcp-discord
+    transport: "stdio"
+    command: "npx -y mcp-discord"
+    token_injection: "env"
+    token_env_var: "DISCORD_TOKEN"
+  confirm_tools: ["send_message"]
+
+# ───────────────────────────── DEV / CODE ─────────────────────────────────
 github:
   name: "GitHub"
   category: "dev"
@@ -38,12 +98,267 @@ github:
     type: "pat"
     help_url: "https://github.com/settings/tokens"
     token_label: "Personal Access Token (repo, read:org, workflow)"
-    validate_url: "https://api.github.com/user"   # cheap authed call to validate
+    validate_url: "https://api.github.com/user"
     account_field: "login"
-  mcp:
-    # Maintained GitHub MCP server: @modelcontextprotocol/server-github
+  mcp:   # @modelcontextprotocol/server-github
     transport: "stdio"
     command: "npx -y @modelcontextprotocol/server-github"
     token_injection: "env"
     token_env_var: "GITHUB_PERSONAL_ACCESS_TOKEN"
   confirm_tools: ["merge_pull_request", "delete_repository", "create_or_update_file"]
+
+gitlab:
+  name: "GitLab"
+  category: "dev"
+  icon: "tabler:brand-gitlab"
+  auth:
+    type: "pat"
+    help_url: "https://gitlab.com/-/profile/personal_access_tokens"
+    token_label: "Personal Access Token (api)"
+    validate_url: "https://gitlab.com/api/v4/user"
+    account_field: "username"
+  mcp:   # @modelcontextprotocol/server-gitlab
+    transport: "stdio"
+    command: "npx -y @modelcontextprotocol/server-gitlab"
+    token_injection: "env"
+    token_env_var: "GITLAB_PERSONAL_ACCESS_TOKEN"
+  confirm_tools: ["create_merge_request", "merge_merge_request"]
+
+linear:
+  name: "Linear"
+  category: "dev"
+  icon: "tabler:brand-linear"
+  auth:
+    type: "api_key"
+    help_url: "https://linear.app/settings/api"
+    token_label: "Linear API Key"
+  mcp:   # community: @tacticlaunch/mcp-linear
+    transport: "stdio"
+    command: "npx -y @tacticlaunch/mcp-linear"
+    token_injection: "env"
+    token_env_var: "LINEAR_API_KEY"
+  confirm_tools: ["delete_issue"]
+
+jira:
+  name: "Jira"
+  category: "productivity"
+  icon: "tabler:brand-trello"
+  auth:
+    type: "oauth2"
+    authorize_url: "https://auth.atlassian.com/authorize"
+    token_url: "https://auth.atlassian.com/oauth/token"
+    scopes: ["read:jira-work", "write:jira-work", "offline_access"]
+    pkce: true
+    extra_authorize_params: { audience: "api.atlassian.com", prompt: "consent" }
+    client_id_env: "ATLASSIAN_CLIENT_ID"
+    client_secret_env: "ATLASSIAN_CLIENT_SECRET"
+  mcp:   # community: @sooperset/mcp-atlassian (python; or a node equivalent)
+    transport: "stdio"
+    command: "npx -y mcp-atlassian"
+    token_injection: "env"
+    token_env_var: "JIRA_OAUTH_TOKEN"
+  confirm_tools: ["delete_issue"]
+
+sentry:
+  name: "Sentry"
+  category: "dev"
+  icon: "tabler:bug"
+  auth:
+    type: "pat"
+    help_url: "https://sentry.io/settings/account/api/auth-tokens/"
+    token_label: "Auth Token"
+  mcp:   # @sentry/mcp-server
+    transport: "stdio"
+    command: "npx -y @sentry/mcp-server"
+    token_injection: "env"
+    token_env_var: "SENTRY_AUTH_TOKEN"
+  confirm_tools: []
+
+vercel:
+  name: "Vercel"
+  category: "dev"
+  icon: "tabler:triangle"
+  auth:
+    type: "pat"
+    help_url: "https://vercel.com/account/tokens"
+    token_label: "Access Token"
+    validate_url: "https://api.vercel.com/v2/user"
+    account_field: "user"
+  mcp:   # community: mcp-vercel
+    transport: "stdio"
+    command: "npx -y mcp-vercel"
+    token_injection: "env"
+    token_env_var: "VERCEL_TOKEN"
+  confirm_tools: ["create_deployment", "delete_deployment"]
+
+cloudflare:
+  name: "Cloudflare"
+  category: "data"
+  icon: "tabler:brand-cloudflare"
+  auth:
+    type: "api_key"
+    help_url: "https://dash.cloudflare.com/profile/api-tokens"
+    token_label: "API Token"
+    validate_url: "https://api.cloudflare.com/client/v4/user/tokens/verify"
+  mcp:   # @cloudflare/mcp-server-cloudflare
+    transport: "stdio"
+    command: "npx -y @cloudflare/mcp-server-cloudflare"
+    token_injection: "env"
+    token_env_var: "CLOUDFLARE_API_TOKEN"
+  confirm_tools: ["purge_cache", "delete_record"]
+
+docker_hub:
+  name: "Docker Hub"
+  category: "dev"
+  icon: "tabler:brand-docker"
+  auth:
+    type: "pat"
+    help_url: "https://hub.docker.com/settings/security"
+    token_label: "Access Token"
+  mcp:   # community: docker hub MCP
+    transport: "stdio"
+    command: "npx -y @docker/hub-mcp"
+    token_injection: "env"
+    token_env_var: "DOCKER_HUB_TOKEN"
+  confirm_tools: []
+
+# ─────────────────────── PRODUCTIVITY / KNOWLEDGE ──────────────────────────
+notion:
+  name: "Notion"
+  category: "productivity"
+  icon: "tabler:brand-notion"
+  auth:
+    type: "oauth2"
+    authorize_url: "https://api.notion.com/v1/oauth/authorize"
+    token_url: "https://api.notion.com/v1/oauth/token"
+    scopes: []
+    pkce: false
+    extra_authorize_params: { owner: "user" }
+    client_id_env: "NOTION_CLIENT_ID"
+    client_secret_env: "NOTION_CLIENT_SECRET"
+  mcp:   # @notionhq/notion-mcp-server
+    transport: "stdio"
+    command: "npx -y @notionhq/notion-mcp-server"
+    token_injection: "env"
+    token_env_var: "NOTION_TOKEN"
+  confirm_tools: ["delete_page", "delete_block"]
+
+confluence:
+  name: "Confluence"
+  category: "productivity"
+  icon: "tabler:file-text"
+  auth:
+    type: "oauth2"
+    authorize_url: "https://auth.atlassian.com/authorize"
+    token_url: "https://auth.atlassian.com/oauth/token"
+    scopes: ["read:confluence-content.all", "write:confluence-content", "offline_access"]
+    pkce: true
+    extra_authorize_params: { audience: "api.atlassian.com", prompt: "consent" }
+    client_id_env: "ATLASSIAN_CLIENT_ID"
+    client_secret_env: "ATLASSIAN_CLIENT_SECRET"
+  mcp:   # community: @sooperset/mcp-atlassian
+    transport: "stdio"
+    command: "npx -y mcp-atlassian"
+    token_injection: "env"
+    token_env_var: "CONFLUENCE_OAUTH_TOKEN"
+  confirm_tools: ["delete_page"]
+
+todoist:
+  name: "Todoist"
+  category: "productivity"
+  icon: "tabler:checkbox"
+  auth:
+    type: "api_key"
+    help_url: "https://todoist.com/app/settings/integrations/developer"
+    token_label: "API Token"
+    validate_url: "https://api.todoist.com/rest/v2/projects"
+  mcp:   # community: @abhiz123/todoist-mcp-server
+    transport: "stdio"
+    command: "npx -y @abhiz123/todoist-mcp-server"
+    token_injection: "env"
+    token_env_var: "TODOIST_API_TOKEN"
+  confirm_tools: []
+
+google_drive:
+  name: "Google Drive"
+  category: "storage"
+  icon: "tabler:brand-google-drive"
+  auth:
+    type: "oauth2"
+    authorize_url: "https://accounts.google.com/o/oauth2/v2/auth"
+    token_url: "https://oauth2.googleapis.com/token"
+    scopes:
+      - "https://www.googleapis.com/auth/drive.file"
+      - "https://www.googleapis.com/auth/userinfo.email"
+    pkce: true
+    extra_authorize_params: { access_type: "offline", prompt: "consent" }
+    client_id_env: "GOOGLE_CLIENT_ID"
+    client_secret_env: "GOOGLE_CLIENT_SECRET"
+    userinfo_url: "https://www.googleapis.com/oauth2/v2/userinfo"
+    account_field: "email"
+  mcp:   # @modelcontextprotocol/server-gdrive
+    transport: "stdio"
+    command: "npx -y @modelcontextprotocol/server-gdrive"
+    token_injection: "env"
+    token_env_var: "GDRIVE_OAUTH_TOKEN"
+  confirm_tools: ["delete_file"]
+
+# ────────────────────────── DATA / STORAGE / OPS ──────────────────────────
+postgres:
+  name: "PostgreSQL"
+  category: "data"
+  icon: "tabler:database"
+  auth:
+    type: "api_key"
+    help_url: "https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING"
+    token_label: "Connection string (DSN)"
+  mcp:   # @modelcontextprotocol/server-postgres (DSN passed as a CLI arg)
+    transport: "stdio"
+    command: "npx -y @modelcontextprotocol/server-postgres"
+    token_injection: "arg"
+  confirm_tools: ["execute", "query_write"]
+
+supabase:
+  name: "Supabase"
+  category: "data"
+  icon: "tabler:brand-supabase"
+  auth:
+    type: "pat"
+    help_url: "https://supabase.com/dashboard/account/tokens"
+    token_label: "Service-role / access token (POWERFUL — use carefully)"
+  mcp:   # @supabase/mcp-server-supabase
+    transport: "stdio"
+    command: "npx -y @supabase/mcp-server-supabase"
+    token_injection: "env"
+    token_env_var: "SUPABASE_ACCESS_TOKEN"
+  confirm_tools: ["execute_sql", "apply_migration", "delete"]
+
+aws:
+  name: "AWS"
+  category: "data"
+  icon: "tabler:brand-aws"
+  auth:
+    type: "api_key"
+    help_url: "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html"
+    token_label: "Access key bundle (AKID:SECRET)"
+  mcp:   # community: aws mcp server (credentials bundle injected)
+    transport: "stdio"
+    command: "npx -y aws-mcp-server"
+    token_injection: "env"
+    token_env_var: "AWS_CREDENTIALS"
+  confirm_tools: ["create", "delete", "put", "update", "terminate"]
+
+stripe:
+  name: "Stripe"
+  category: "data"
+  icon: "tabler:brand-stripe"
+  auth:
+    type: "api_key"
+    help_url: "https://dashboard.stripe.com/apikeys"
+    token_label: "Restricted (READ-ONLY recommended) API key"
+  mcp:   # @stripe/mcp (agent toolkit). NOTE: IRIS NEVER executes payments.
+    transport: "stdio"
+    command: "npx -y @stripe/mcp --tools=all"
+    token_injection: "env"
+    token_env_var: "STRIPE_SECRET_KEY"
+  confirm_tools: ["create_payment_link", "create_invoice", "create_refund", "create_customer"]

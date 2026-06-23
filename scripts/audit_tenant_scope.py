@@ -16,25 +16,30 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REPO = ROOT / "iris" / "data" / "repo.py"
+REPOS = [
+    ROOT / "iris" / "data" / "repo.py",
+    ROOT / "iris" / "connectors" / "repo.py",   # connector connections
+]
 MODELS = ROOT / "iris" / "data" / "models.py"
 
 
 def audit_repo() -> list[str]:
-    src = REPO.read_text(encoding="utf-8")
-    tree = ast.parse(src)
     violations: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for repo in REPOS:
+        if not repo.exists():
             continue
-        body_src = ast.get_source_segment(src, node) or ""
-        if "select(" not in body_src or "tenant_id" in body_src:
-            continue
-        # Exemption: selecting the tenants table itself is allowed unscoped — it
-        # IS the tenant list (used by the cost-page tenant selector).
-        if "select(Tenant)" in body_src:
-            continue
-        violations.append(f"{node.name}() issues select() without tenant_id")
+        src = repo.read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body_src = ast.get_source_segment(src, node) or ""
+            if "select(" not in body_src or "tenant_id" in body_src:
+                continue
+            # Exemption: selecting the tenants table itself is allowed unscoped.
+            if "select(Tenant)" in body_src:
+                continue
+            violations.append(f"{repo.name}:{node.name}() issues select() without tenant_id")
     return violations
 
 

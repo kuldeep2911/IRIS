@@ -52,4 +52,52 @@ export async function getTenants(): Promise<TenantInfo[]> {
   return (await res.json()) as TenantInfo[];
 }
 
+// ── connectors ──────────────────────────────────────────────────────────────
+export interface ConnectorInfo {
+  id: string;
+  name: string;
+  category: string;
+  icon: string | null;
+  auth_type: "oauth2" | "pat" | "api_key" | "none";
+  help_url: string | null;
+  token_label: string | null;
+  status: "connected" | "disconnected" | "error" | "pending";
+  account_label: string | null;
+  last_error: string | null;
+  confirm_tools: string[];
+}
+
+export async function getConnectors(): Promise<ConnectorInfo[]> {
+  const res = await fetch(`${API_BASE}/connectors`);
+  if (!res.ok) throw new Error(`connectors failed: ${res.status}`);
+  return (await res.json()) as ConnectorInfo[];
+}
+
+export async function beginConnect(
+  id: string,
+): Promise<{ authorize_url?: string; needs_token?: boolean; help_url?: string; label?: string }> {
+  const res = await fetch(`${API_BASE}/connectors/${id}/connect`, { method: "POST" });
+  return res.json();
+}
+
+export async function submitToken(id: string, token: string): Promise<{ status?: string; error?: string; detail?: string }> {
+  const res = await fetch(`${API_BASE}/connectors/${id}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  return res.json();
+}
+
+export async function disconnectConnector(id: string): Promise<void> {
+  await fetch(`${API_BASE}/connectors/${id}/disconnect`, { method: "POST" });
+}
+
+export async function connectorStatus(
+  id: string,
+): Promise<{ status: string; account_label: string | null; last_error: string | null }> {
+  const res = await fetch(`${API_BASE}/connectors/${id}/status`);
+  return res.json();
+}
+
 export { API_BASE };

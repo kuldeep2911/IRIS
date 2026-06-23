@@ -48,6 +48,7 @@ class MCPHost:
         self._connector_stacks: dict[str, AsyncExitStack] = {}   # key -> stack
         self._connector_schemas: dict[str, list[ToolSchema]] = {}  # key -> schemas
         self._connector_confirm: dict[str, set[str]] = {}        # key -> confirm tools
+        self._connector_token: dict[str, str] = {}               # key -> token started with
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     async def connect_all(self) -> dict[str, bool]:
@@ -132,6 +133,7 @@ class MCPHost:
         self._connector_stacks[key] = stack
         self._connector_schemas[key] = schemas
         self._connector_confirm[key] = set(spec.confirm_tools)
+        self._connector_token[key] = token
         self._health[key] = True
         log.info("connector.server_started", connector=connection.connector_id, tools=len(schemas))
 
@@ -146,6 +148,7 @@ class MCPHost:
             self._tool_to_server.pop(tool, None)
         self._connector_schemas.pop(key, None)
         self._connector_confirm.pop(key, None)
+        self._connector_token.pop(key, None)
         self._sessions.pop(key, None)
         self._health.pop(key, None)
         try:
@@ -174,6 +177,9 @@ class MCPHost:
     def running_connectors(self, tenant_id: str, user_id: str | None) -> list[str]:
         prefix = f"conn:{tenant_id}:{user_id or '-'}:"
         return [k.split(":")[-1] for k in self._connector_stacks if k.startswith(prefix)]
+
+    def connector_started_token(self, tenant_id: str, user_id: str | None, connector_id: str) -> str | None:
+        return self._connector_token.get(self.connector_key(tenant_id, user_id, connector_id))
 
     async def _spawn_connector(self, stack: AsyncExitStack, spec: Any, token: str) -> Any:
         from mcp import ClientSession, StdioServerParameters

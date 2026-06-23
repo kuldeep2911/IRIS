@@ -29,6 +29,7 @@ from iris.data.repo import (
     record_usage,
     seed_defaults,
 )
+from iris.gateway.connectors_api import router as connectors_router
 from iris.gateway.middleware import TenantMiddleware
 from iris.gateway.ws import register_ws
 from iris.llm import get_llm
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="I.R.I.S.", version=__version__, lifespan=lifespan)
     app.add_middleware(TenantMiddleware)
     register_ws(app)  # /ws live Agent Monitor stream
+    app.include_router(connectors_router)  # /connectors + OAuth callback
 
     @app.get("/health")
     async def health(request: Request) -> dict:
