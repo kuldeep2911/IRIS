@@ -163,6 +163,16 @@ PRICE_MAP: dict[str, ModelPrice] = {
 }
 
 
+# Gemini TTS fallback model (used by voice/tts.py when Kokoro isn't available).
+# Lives here so model ids stay in ONE file (GOLDEN RULE #2).
+_TTS_MODEL = "gemini-2.5-flash-preview-tts"
+
+
+def tts_model() -> str:
+    """The Gemini TTS model id (provider-agnostic callers use this, not a literal)."""
+    return _TTS_MODEL
+
+
 def cost_usd(model: str, input_tok: int, output_tok: int) -> float:
     """Compute the USD cost of a call. Unknown model -> 0.0 (no guess)."""
     price = PRICE_MAP.get(model)

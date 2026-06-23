@@ -58,6 +58,24 @@ class Settings(BaseSettings):
     # ── Filesystem sandbox (filesystem/shell MCP may only touch this) ─────
     WORKSPACE_DIR: str = "./workspace"
 
+    # ── Voice (Phase 5) — provider-agnostic adapters ──────────────────────
+    STT_PROVIDER: str = "sarvam"          # sarvam | whisper
+    SARVAM_API_KEY: str = ""              # read here only (GOLDEN RULE #8)
+    STT_LANGUAGE: str = "en-IN"           # Sarvam default: Indian English
+    WHISPER_MODEL: str = "base"           # faster-whisper fallback size
+
+    TTS_PROVIDER: str = "kokoro"          # kokoro | gemini
+    TTS_VOICE: str = "af_heart"           # Kokoro female voice
+    TTS_SAMPLE_RATE: int = 24000
+    KOKORO_MODEL_PATH: str | None = None  # path to kokoro onnx model (optional)
+    KOKORO_VOICES_PATH: str | None = None # path to kokoro voices bin (optional)
+    GEMINI_TTS_VOICE: str = "Aoede"       # female prebuilt voice (Gemini fallback)
+
+    WAKE_WORD: str = "hey iris"
+    PORCUPINE_ACCESS_KEY: str = ""        # picovoice access key (wake word)
+    PORCUPINE_KEYWORD_PATH: str | None = None  # custom "Hey IRIS" .ppn (optional)
+    VOICE_CHAT_URL: str = "http://localhost:8000/chat"
+
     # ── Browser mesh (Phase 2) ────────────────────────────────────────────
     # Real Chrome profile dir so logged-in sessions (Gmail/WhatsApp/etc) are
     # reused by the browser MCP servers. Empty -> servers use their own profile.

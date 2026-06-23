@@ -125,6 +125,31 @@ privacy filter). Example tasks:
 - *"Send a WhatsApp to Priya saying I'm running 10 minutes late."* (confirm first)
 - *"Summarise the last 10 messages in my family group."* (summaries only)
 
+## Voice (Phase 5)
+
+Real-time loop: **mic → "Hey IRIS" wake word → STT → core → TTS → speaker**. Only
+**text** ever crosses into the core. Every piece is a provider-agnostic adapter
+(swap in one file):
+
+| Piece | Default | Fallback |
+|-------|---------|----------|
+| STT   | Sarvam v3 (Indian English) | local faster-whisper |
+| TTS   | Kokoro-82M, female `af_heart` | Gemini TTS (female voice) |
+| Wake  | Porcupine "Hey IRIS" | — |
+
+```bash
+pip install -e ".[voice]"          # numpy, sounddevice, pvporcupine, kokoro-onnx, faster-whisper
+python scripts/smoke_tts.py        # writes workspace/iris_online.wav (female voice)
+python -m iris.voice.wake          # run the live loop (needs mic + keys below)
+```
+
+Config in `.env`: `SARVAM_API_KEY` (STT), `PORCUPINE_ACCESS_KEY` + optional
+custom `PORCUPINE_KEYWORD_PATH` (a "Hey IRIS" `.ppn`). For the **local Kokoro**
+female voice, download `kokoro-v1.0.onnx` + `voices-v1.0.bin` and set
+`KOKORO_MODEL_PATH` / `KOKORO_VOICES_PATH`; otherwise IRIS uses the Gemini TTS
+female voice automatically. LiveKit can replace the local mic/speaker transport
+for streaming/remote use (the FRIDAY pattern) without changing the loop.
+
 ## Make targets
 
 | Target          | Does                                                    |

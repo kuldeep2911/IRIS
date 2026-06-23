@@ -40,6 +40,13 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.7",
 ]
+voice = [
+    "numpy>=1.26",
+    "sounddevice>=0.5",      # local mic/speaker transport
+    "pvporcupine>=3.0",      # "Hey IRIS" wake word
+    "kokoro-onnx>=0.4",      # local Kokoro-82M female voice (af_heart)
+    "faster-whisper>=1.0",   # offline STT fallback
+]
 
 [build-system]
 requires = ["setuptools>=68"]

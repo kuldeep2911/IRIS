@@ -1,16 +1,30 @@
-// IRIS dashboard shell — scaffold only. Pages (Chat, Agent Monitor, Memory,
-// Connections, Settings), WebSocket streaming, and the optional avatar are
-// built out in PHASE 5.2 / 6.2.
+// IRIS dashboard — routes + layout. Dark theme; WebSocket connects on mount.
+import { useEffect } from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import Layout from "./components/Layout";
+import Chat from "./pages/Chat";
+import AgentMonitor from "./pages/AgentMonitor";
+import Memory from "./pages/Memory";
+import Connections from "./pages/Connections";
+import Settings from "./pages/Settings";
+import { connectWs } from "./api/ws";
+
 export default function App() {
+  useEffect(() => {
+    connectWs();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-iris-bg text-gray-200 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight">
-          I.R.I.S.{" "}
-          <span className="text-iris-cyan">v5</span>
-        </h1>
-        <p className="mt-2 text-gray-400">Dashboard scaffold — built out in Phase 5.</p>
-      </div>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Chat />} />
+          <Route path="agents" element={<AgentMonitor />} />
+          <Route path="memory" element={<Memory />} />
+          <Route path="connections" element={<Connections />} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
