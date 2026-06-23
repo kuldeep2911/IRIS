@@ -111,3 +111,30 @@ def est_tokens(assembled: dict[str, Any] | str) -> int:
     """Rough token estimate (~4 chars/token) of the assembled context."""
     text = assembled if isinstance(assembled, str) else json.dumps(assembled, default=str)
     return max(1, len(text) // 4)
+
+
+# ── data sanitiser (GOLDEN RULE #5) ──────────────────────────────────────────
+# Final safety net before any payload reaches Gemini: redact secrets and strip
+# raw email/chat/file bodies. Tool results are already summarised at the
+# orchestrator boundary; this guarantees the invariant for the WHOLE payload.
+def sanitise_outbound(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return a copy of ``messages`` with every text content sanitised."""
+    from iris.security.redaction import _redact_text
+
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        clean = dict(msg)
+        content = clean.get("content")
+        if isinstance(content, str):
+            clean["content"] = _redact_text(content)
+        out.append(clean)
+    return out
+
+
+def contains_raw_body(text: str) -> bool:
+    """Heuristic used by the privacy audit: does text look like a raw body dump?"""
+    from iris.core.privacy import _BODY_KEYS
+
+    low = (text or "").lower()
+    # Raw bodies carry these JSON keys verbatim; summaries drop them.
+    return any(f'"{k}"' in low for k in _BODY_KEYS)

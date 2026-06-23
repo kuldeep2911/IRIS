@@ -26,9 +26,11 @@ import structlog
 from iris.config.settings import get_settings
 from iris.agents.base import SubAgentRunner, load_specialists
 from iris.core.confirm import is_payment, needs_confirmation
-from iris.core.context import RequestContext, assemble, est_tokens
+from iris.core.context import RequestContext, assemble, est_tokens, sanitise_outbound
 from iris.core.planner import SubTask, plan, should_delegate
 from iris.core.privacy import summarise_tool_output
+from iris.core.telemetry import span
+from iris.security.sandbox import SandboxViolation, validate_tool_call
 from iris.llm.base import LLMClient, ToolCall, Usage
 from iris.mcp.host import MCPHost, ToolError
 from iris.memory.mem0_client import Mem0Client
@@ -96,7 +98,8 @@ class Orchestrator:
         ctx.memory = self._memory  # used by assemble() for recall
         ctx.screen = self._screen  # opt-in screen intel (Phase 7.2)
         assembled = await assemble(request, ctx)
-        rc = classify(request, est_tokens(assembled))
+        with span("router.classify"):
+            rc = classify(request, est_tokens(assembled))
 
         # Multi-agent path ONLY for genuinely hard, multi-part work (else cheap).
         if should_delegate(rc, request):
@@ -117,7 +120,7 @@ class Orchestrator:
         for step in range(1, MAX_STEPS + 1):
             resp = await self._llm.complete(
                 choice.model,
-                messages,
+                sanitise_outbound(messages),  # GOLDEN RULE #5: nothing raw to Gemini
                 tools=tools or None,
                 max_output_tokens=choice.max_output_tokens,
             )
@@ -273,6 +276,13 @@ class Orchestrator:
         if is_payment(call.name):
             await self._emit_tool(ctx, "blocked", call.name, "blocked", "payment")
             return "ERROR: payment/purchase actions are hard-blocked and will not be executed."
+
+        # Sandbox: filesystem/shell calls must stay inside ./workspace.
+        try:
+            validate_tool_call(call.name, call.args, server=self._mcp.server_for(call.name))
+        except SandboxViolation as exc:
+            await self._emit_tool(ctx, "blocked", call.name, "blocked", f"sandbox: {exc}")
+            return f"ERROR: blocked by sandbox: {exc}"
 
         # GOLDEN RULE #6: gate outward/destructive actions on confirmation.
         if needs_confirmation(call.name):

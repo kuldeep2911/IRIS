@@ -32,6 +32,7 @@ dependencies = [
     "opentelemetry-sdk>=1.28",
     "structlog>=24.4",
     "keyring>=25.0",            # OS keychain for site credentials (security/secrets.py)
+    "cryptography>=43.0",       # AES-256 at rest (security/crypto.py)
 ]
 
 [project.optional-dependencies]

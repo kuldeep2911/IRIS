@@ -102,8 +102,11 @@ class MCPHost:
         session = self._sessions.get(server)
         if session is None or not self._health.get(server):
             raise ToolError(f"Server '{server}' for tool '{tool_name}' is unavailable.")
+        from iris.core.telemetry import span
+
         try:
-            result = await session.call_tool(tool_name, args or {})
+            with span("mcp.invoke", tool=tool_name, server=server):
+                result = await session.call_tool(tool_name, args or {})
         except Exception as exc:  # noqa: BLE001
             raise ToolError(f"Tool '{tool_name}' call failed: {exc}") from exc
 

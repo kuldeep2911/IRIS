@@ -26,4 +26,17 @@ export async function getHealth(): Promise<unknown> {
   return res.json();
 }
 
+export interface UsageReport {
+  tenant_id: string;
+  totals: { input_tok: number; output_tok: number; cost_usd: number };
+  by_model: { model: string; input_tok: number; output_tok: number; cost_usd: number; calls: number }[];
+  by_day: { day: string; cost_usd: number; tokens: number }[];
+}
+
+export async function getUsage(): Promise<UsageReport> {
+  const res = await fetch(`${API_BASE}/usage`);
+  if (!res.ok) throw new Error(`usage failed: ${res.status}`);
+  return (await res.json()) as UsageReport;
+}
+
 export { API_BASE };

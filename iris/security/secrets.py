@@ -65,6 +65,27 @@ class KeyringSecretStore(SecretStore):
             log.warning("secrets.delete_failed", name=name, error=str(exc))
 
 
+class VaultSecretStore(SecretStore):
+    """Vault / cloud-KMS backend (SaaS) — the swap target for multi-tenant.
+
+    Stubbed: wire to HashiCorp Vault / AWS Secrets Manager here and flip
+    ``get_secret_store`` to return this. The rest of IRIS is unchanged because
+    everything goes through the :class:`SecretStore` interface (GOLDEN RULE #10).
+    """
+
+    def __init__(self, *, namespace: str = "iris") -> None:
+        self._namespace = namespace
+
+    def get(self, name: str) -> str | None:  # pragma: no cover - SaaS stub
+        raise NotImplementedError("Configure a Vault/KMS backend for SaaS deployments.")
+
+    def set(self, name: str, value: str) -> None:  # pragma: no cover - SaaS stub
+        raise NotImplementedError("Configure a Vault/KMS backend for SaaS deployments.")
+
+    def delete(self, name: str) -> None:  # pragma: no cover - SaaS stub
+        raise NotImplementedError("Configure a Vault/KMS backend for SaaS deployments.")
+
+
 # ── module-level access (the ONE place to swap the backend) ──────────────────
 _store: SecretStore | None = None
 
@@ -72,7 +93,9 @@ _store: SecretStore | None = None
 def get_secret_store() -> SecretStore:
     global _store
     if _store is None:
-        _store = KeyringSecretStore()  # swap to VaultSecretStore() for SaaS
+        # Single source of truth for the backend. Swap to VaultSecretStore()
+        # for SaaS — no other code changes.
+        _store = KeyringSecretStore()
     return _store
 
 

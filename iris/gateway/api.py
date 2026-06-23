@@ -18,8 +18,16 @@ from iris import __version__
 from iris.core.context import RequestContext
 from iris.core.events import EventBus
 from iris.core.orchestrator import Orchestrator
+from iris.core.telemetry import setup_tracing, span
 from iris.data.db import init_models, session_scope
-from iris.data.repo import MessageRepo, SessionRepo, UserRepo, record_usage, seed_defaults
+from iris.data.repo import (
+    MessageRepo,
+    SessionRepo,
+    UsageRepo,
+    UserRepo,
+    record_usage,
+    seed_defaults,
+)
 from iris.gateway.middleware import TenantMiddleware
 from iris.gateway.ws import register_ws
 from iris.llm import get_llm
@@ -28,6 +36,7 @@ from iris.security.audit import subscribe_audit
 from iris.security.redaction import configure_logging
 
 configure_logging()  # install the redaction-aware structlog pipeline early
+setup_tracing()      # install the OpenTelemetry tracer provider
 
 log = structlog.get_logger(__name__)
 
@@ -93,6 +102,19 @@ def create_app() -> FastAPI:
             "mcp": mcp.health() if mcp else {},
         }
 
+    @app.get("/usage")
+    async def usage(request: Request) -> dict:
+        """Cost/usage aggregates for the current tenant (Cost page data source)."""
+        tenant_id = request.state.tenant_id
+        async with session_scope() as s:
+            repo = UsageRepo(s)
+            return {
+                "tenant_id": tenant_id,
+                "totals": await repo.totals(tenant_id),
+                "by_model": await repo.by_model(tenant_id),
+                "by_day": await repo.by_day(tenant_id),
+            }
+
     @app.post("/chat", response_model=ChatResponse)
     async def chat(req: ChatRequest, request: Request) -> ChatResponse:
         orchestrator: Orchestrator = request.app.state.orchestrator
@@ -112,7 +134,8 @@ def create_app() -> FastAPI:
             request_id=getattr(request.state, "request_id", None),
             bus=request.app.state.event_bus,
         )
-        result = await orchestrator.handle(req.message, ctx)
+        with span("gateway.chat", tenant_id=tenant_id, session_id=session_id):
+            result = await orchestrator.handle(req.message, ctx)
 
         # Persist the assistant turn with model + output tokens.
         async with session_scope() as s:

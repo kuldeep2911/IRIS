@@ -26,6 +26,7 @@ from iris.core.privacy import summarise_tool_output
 from iris.llm.base import LLMClient, ToolCall, Usage
 from iris.mcp.host import MCPHost, ToolError
 from iris.router.model_router import RequestClass, model_for
+from iris.security.sandbox import SandboxViolation, validate_tool_call
 
 log = structlog.get_logger(__name__)
 
@@ -155,6 +156,11 @@ class SubAgentRunner:
         if is_payment(call.name):
             await _emit(ctx, "tool_result", agent, "blocked", f"{call.name} (payment)")
             return "ERROR: payment/purchase actions are hard-blocked."
+        try:
+            validate_tool_call(call.name, call.args, server=self._mcp.server_for(call.name))
+        except SandboxViolation as exc:
+            await _emit(ctx, "tool_result", agent, "blocked", f"sandbox: {exc}")
+            return f"ERROR: blocked by sandbox: {exc}"
         if needs_confirmation(call.name) and not ctx.auto_confirm:
             await _emit(ctx, "confirm_request", agent, "confirm", call.name)
             await _emit(ctx, "tool_result", agent, "denied", call.name)

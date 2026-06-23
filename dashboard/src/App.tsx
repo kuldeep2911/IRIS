@@ -6,6 +6,7 @@ import Chat from "./pages/Chat";
 import AgentMonitor from "./pages/AgentMonitor";
 import Memory from "./pages/Memory";
 import Connections from "./pages/Connections";
+import Cost from "./pages/Cost";
 import Settings from "./pages/Settings";
 import { connectWs } from "./api/ws";
 
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="agents" element={<AgentMonitor />} />
           <Route path="memory" element={<Memory />} />
           <Route path="connections" element={<Connections />} />
+          <Route path="cost" element={<Cost />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

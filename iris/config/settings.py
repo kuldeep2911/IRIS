@@ -39,6 +39,10 @@ class Settings(BaseSettings):
         default="",
         description="Google Gemini API key. Read here only; never elsewhere.",
     )
+    # AES-256-at-rest passphrase (the key is derived in-memory, never stored).
+    # In prod, source this from the keychain/Vault, not .env.
+    IRIS_PASSPHRASE: str = ""
+    IRIS_CRYPTO_SALT: str = "iris-v5-default-salt"  # override per deployment
 
     # ── Data stores ───────────────────────────────────────────────────────
     DATABASE_URL: str = "sqlite:///./iris.db"

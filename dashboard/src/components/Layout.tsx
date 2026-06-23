@@ -7,6 +7,7 @@ const NAV = [
   { to: "/agents", label: "Agent Monitor" },
   { to: "/memory", label: "Memory" },
   { to: "/connections", label: "Connections" },
+  { to: "/cost", label: "Cost" },
   { to: "/settings", label: "Settings" },
 ];
 

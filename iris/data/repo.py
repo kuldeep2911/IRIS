@@ -222,6 +222,58 @@ class UsageRepo(_BaseRepo):
         await self.session.flush()
         return row
 
+    async def totals(self, tenant_id: str) -> dict[str, float]:
+        _require_tenant(tenant_id)
+        from sqlalchemy import func
+
+        q = select(
+            func.coalesce(func.sum(Usage.input_tok), 0),
+            func.coalesce(func.sum(Usage.output_tok), 0),
+            func.coalesce(func.sum(Usage.cost_usd), 0.0),
+        ).where(Usage.tenant_id == tenant_id)
+        inp, out, cost = (await self.session.execute(q)).one()
+        return {"input_tok": int(inp), "output_tok": int(out), "cost_usd": float(cost)}
+
+    async def by_model(self, tenant_id: str) -> list[dict]:
+        _require_tenant(tenant_id)
+        from sqlalchemy import func
+
+        q = (
+            select(
+                Usage.model,
+                func.sum(Usage.input_tok), func.sum(Usage.output_tok),
+                func.sum(Usage.cost_usd), func.count(),
+            )
+            .where(Usage.tenant_id == tenant_id)
+            .group_by(Usage.model)
+            .order_by(func.sum(Usage.cost_usd).desc())
+        )
+        rows = (await self.session.execute(q)).all()
+        return [
+            {"model": m, "input_tok": int(i or 0), "output_tok": int(o or 0),
+             "cost_usd": float(c or 0.0), "calls": int(n)}
+            for m, i, o, c, n in rows
+        ]
+
+    async def by_day(self, tenant_id: str, days: int = 30) -> list[dict]:
+        _require_tenant(tenant_id)
+        from sqlalchemy import func
+
+        day = func.strftime("%Y-%m-%d", Usage.ts) if _is_sqlite() else func.date(Usage.ts)
+        q = (
+            select(day, func.sum(Usage.cost_usd), func.sum(Usage.input_tok + Usage.output_tok))
+            .where(Usage.tenant_id == tenant_id)
+            .group_by(day)
+            .order_by(day.desc())
+            .limit(days)
+        )
+        rows = (await self.session.execute(q)).all()
+        return [{"day": str(d), "cost_usd": float(c or 0.0), "tokens": int(t or 0)} for d, c, t in rows]
+
+
+def _is_sqlite() -> bool:
+    return get_settings().DATABASE_URL.startswith("sqlite")
+
 
 # ── startup helpers ──────────────────────────────────────────────────────────
 async def seed_defaults() -> tuple[str, str]:
