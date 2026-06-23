@@ -1,10 +1,11 @@
 """Wake word + voice loop (mic -> wake -> STT -> core -> TTS -> speaker).
 
-"Hey IRIS" is detected by Porcupine; on wake we capture an utterance, transcribe
-it (STT), send the TEXT to the core via ``POST /chat`` (ONLY text crosses into
-the core — never raw audio), then speak the reply (TTS). Mirrors the FRIDAY
-reference pipeline; LiveKit can replace the local mic/speaker transport for
-remote/streaming use (see README) without changing this flow.
+"Hey IRIS" is detected by **openWakeWord** (Apache-2.0, fully local, no API key,
+no trial); on wake we capture an utterance, transcribe it (STT), send the TEXT
+to the core via ``POST /chat`` (ONLY text crosses into the core — never raw
+audio), then speak the reply (TTS). Mirrors the FRIDAY reference pipeline;
+LiveKit can replace the local mic/speaker transport for remote/streaming use
+(see README) without changing this flow.
 
 All audio libs are lazy-imported so importing this module stays cheap.
 """
@@ -21,39 +22,43 @@ from iris.voice.tts import TTS, get_tts
 
 log = structlog.get_logger(__name__)
 
-_FRAME_RATE = 16000          # Porcupine + capture sample rate
+_FRAME_RATE = 16000          # capture sample rate (openWakeWord + whisper)
+_OWW_CHUNK = 1280            # openWakeWord frame: 80 ms @ 16 kHz
 _UTTERANCE_SECONDS = 5       # how long to record after wake
 
 
 class WakeWord:
-    """Porcupine "Hey IRIS" detector. ``wait()`` blocks until the word is heard."""
+    """openWakeWord "Hey IRIS" detector. ``wait()`` blocks until the word fires.
+
+    Default uses a pretrained model (``WAKE_MODEL``); point ``WAKE_MODEL_PATH`` at
+    a custom-trained "Hey IRIS" .onnx for the real wake phrase (see README).
+    No access key, no trial — fully open-source and local.
+    """
 
     def __init__(self) -> None:
         settings = get_settings()
-        self._access_key = settings.PORCUPINE_ACCESS_KEY
-        self._keyword_path = settings.PORCUPINE_KEYWORD_PATH
-        self._porcupine = None
+        self._model_ref = settings.WAKE_MODEL_PATH or settings.WAKE_MODEL
+        self._threshold = settings.WAKE_THRESHOLD
+        self._model = None
         self._stream = None
 
     def _ensure(self):
-        if self._porcupine is not None:
+        if self._model is not None:
             return
-        import pvporcupine  # lazy
         import sounddevice as sd  # lazy
+        from openwakeword.model import Model  # lazy
 
-        if not self._access_key:
-            raise RuntimeError("PORCUPINE_ACCESS_KEY not set (configure in .env).")
-        kwargs = {"access_key": self._access_key}
-        if self._keyword_path:
-            kwargs["keyword_paths"] = [self._keyword_path]
-        else:
-            kwargs["keywords"] = ["hey google"]  # placeholder until custom .ppn added
-        self._porcupine = pvporcupine.create(**kwargs)
+        # Ensure pretrained models are present (no-op if a custom path is used).
+        try:
+            import openwakeword
+
+            openwakeword.utils.download_models()
+        except Exception:  # noqa: BLE001 — custom model path doesn't need this
+            pass
+
+        self._model = Model(wakeword_models=[self._model_ref])
         self._stream = sd.RawInputStream(
-            samplerate=self._porcupine.sample_rate,
-            blocksize=self._porcupine.frame_length,
-            dtype="int16",
-            channels=1,
+            samplerate=_FRAME_RATE, blocksize=_OWW_CHUNK, dtype="int16", channels=1
         )
         self._stream.start()
 
@@ -62,20 +67,20 @@ class WakeWord:
         await asyncio.to_thread(self._wait_sync)
 
     def _wait_sync(self) -> None:
-        import struct
+        import numpy as np
 
+        self._model.reset()
         while True:
-            pcm, _ = self._stream.read(self._porcupine.frame_length)
-            frame = struct.unpack_from("h" * self._porcupine.frame_length, pcm)
-            if self._porcupine.process(frame) >= 0:
+            pcm, _ = self._stream.read(_OWW_CHUNK)
+            frame = np.frombuffer(bytes(pcm), dtype=np.int16)
+            scores = self._model.predict(frame)
+            if any(score >= self._threshold for score in scores.values()):
                 return
 
     def close(self) -> None:
         if self._stream is not None:
             self._stream.stop()
             self._stream.close()
-        if self._porcupine is not None:
-            self._porcupine.delete()
 
 
 class VoiceLoop:

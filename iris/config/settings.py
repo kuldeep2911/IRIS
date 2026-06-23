@@ -58,22 +58,29 @@ class Settings(BaseSettings):
     # ── Filesystem sandbox (filesystem/shell MCP may only touch this) ─────
     WORKSPACE_DIR: str = "./workspace"
 
-    # ── Voice (Phase 5) — provider-agnostic adapters ──────────────────────
-    STT_PROVIDER: str = "sarvam"          # sarvam | whisper
-    SARVAM_API_KEY: str = ""              # read here only (GOLDEN RULE #8)
-    STT_LANGUAGE: str = "en-IN"           # Sarvam default: Indian English
-    WHISPER_MODEL: str = "base"           # faster-whisper fallback size
+    # ── Voice (Phase 5) — provider-agnostic adapters, FREE/open-source defaults ──
+    # STT default: faster-whisper (MIT, fully local, no API key). Sarvam is an
+    # optional paid swap (set STT_PROVIDER=sarvam + SARVAM_API_KEY).
+    STT_PROVIDER: str = "whisper"         # whisper (free/local) | sarvam (paid)
+    WHISPER_MODEL: str = "base"           # faster-whisper size: tiny|base|small|...
+    STT_LANGUAGE: str = "en"              # whisper lang hint (en handles Indian English)
+    SARVAM_API_KEY: str = ""              # optional; read here only (GOLDEN RULE #8)
 
-    TTS_PROVIDER: str = "kokoro"          # kokoro | gemini
+    # TTS default: Kokoro-82M (Apache-2.0, local). Gemini TTS is the fallback.
+    TTS_PROVIDER: str = "kokoro"          # kokoro (free/local) | gemini
     TTS_VOICE: str = "af_heart"           # Kokoro female voice
     TTS_SAMPLE_RATE: int = 24000
     KOKORO_MODEL_PATH: str | None = None  # path to kokoro onnx model (optional)
     KOKORO_VOICES_PATH: str | None = None # path to kokoro voices bin (optional)
     GEMINI_TTS_VOICE: str = "Aoede"       # female prebuilt voice (Gemini fallback)
 
+    # Wake word: openWakeWord (Apache-2.0, fully local, no API key, no trial).
+    # Default uses a pretrained model; train a custom "Hey IRIS" .onnx and point
+    # WAKE_MODEL_PATH at it (see README).
     WAKE_WORD: str = "hey iris"
-    PORCUPINE_ACCESS_KEY: str = ""        # picovoice access key (wake word)
-    PORCUPINE_KEYWORD_PATH: str | None = None  # custom "Hey IRIS" .ppn (optional)
+    WAKE_MODEL: str = "hey_jarvis"        # pretrained openWakeWord model name
+    WAKE_MODEL_PATH: str | None = None    # custom-trained "Hey IRIS" model (optional)
+    WAKE_THRESHOLD: float = 0.5
     VOICE_CHAT_URL: str = "http://localhost:8000/chat"
 
     # ── Browser mesh (Phase 2) ────────────────────────────────────────────

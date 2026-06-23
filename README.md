@@ -128,27 +128,33 @@ privacy filter). Example tasks:
 ## Voice (Phase 5)
 
 Real-time loop: **mic → "Hey IRIS" wake word → STT → core → TTS → speaker**. Only
-**text** ever crosses into the core. Every piece is a provider-agnostic adapter
-(swap in one file):
+**text** ever crosses into the core. Defaults are **100% free / open-source and
+local**; paid services are optional swaps (provider-agnostic adapters):
 
-| Piece | Default | Fallback |
-|-------|---------|----------|
-| STT   | Sarvam v3 (Indian English) | local faster-whisper |
-| TTS   | Kokoro-82M, female `af_heart` | Gemini TTS (female voice) |
-| Wake  | Porcupine "Hey IRIS" | — |
+| Piece | Default (free, local) | Optional swap |
+|-------|-----------------------|---------------|
+| STT   | **faster-whisper** (MIT) | Sarvam (paid) |
+| TTS   | **Kokoro-82M** `af_heart` (Apache-2.0) | Gemini TTS |
+| Wake  | **openWakeWord** (Apache-2.0, no key/trial) | — |
 
 ```bash
-pip install -e ".[voice]"          # numpy, sounddevice, pvporcupine, kokoro-onnx, faster-whisper
+pip install -e ".[voice]"          # numpy, sounddevice, openwakeword, kokoro-onnx, faster-whisper
 python scripts/smoke_tts.py        # writes workspace/iris_online.wav (female voice)
-python -m iris.voice.wake          # run the live loop (needs mic + keys below)
+python -m iris.voice.wake          # run the live loop (needs a mic; no API keys)
 ```
 
-Config in `.env`: `SARVAM_API_KEY` (STT), `PORCUPINE_ACCESS_KEY` + optional
-custom `PORCUPINE_KEYWORD_PATH` (a "Hey IRIS" `.ppn`). For the **local Kokoro**
-female voice, download `kokoro-v1.0.onnx` + `voices-v1.0.bin` and set
-`KOKORO_MODEL_PATH` / `KOKORO_VOICES_PATH`; otherwise IRIS uses the Gemini TTS
-female voice automatically. LiveKit can replace the local mic/speaker transport
-for streaming/remote use (the FRIDAY pattern) without changing the loop.
+- **STT** is faster-whisper out of the box — no key. (To use Sarvam instead, set
+  `STT_PROVIDER=sarvam` + `SARVAM_API_KEY`.)
+- **Wake word** is openWakeWord — no access key, no trial. It ships pretrained
+  models (default `WAKE_MODEL=hey_jarvis`); for the real "Hey IRIS" phrase, train
+  a custom model with openWakeWord's notebook and set `WAKE_MODEL_PATH` to the
+  resulting `.onnx`.
+- **TTS** is local Kokoro `af_heart`: download `kokoro-v1.0.onnx` + `voices-v1.0.bin`
+  and set `KOKORO_MODEL_PATH` / `KOKORO_VOICES_PATH`; otherwise IRIS falls back to
+  the Gemini TTS female voice automatically.
+
+LiveKit can replace the local mic/speaker transport for streaming/remote use
+(the FRIDAY pattern) without changing the loop.
 
 ## Make targets
 

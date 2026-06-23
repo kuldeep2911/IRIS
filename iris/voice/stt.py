@@ -39,7 +39,8 @@ class SarvamSTT(STT):
     def __init__(self, api_key: str | None = None, language: str | None = None) -> None:
         settings = get_settings()
         self._api_key = api_key if api_key is not None else settings.SARVAM_API_KEY
-        self._language = language or settings.STT_LANGUAGE
+        # Sarvam uses BCP-47 codes (Indian English); independent of whisper's hint.
+        self._language = language or "en-IN"
 
     async def transcribe(
         self, audio: bytes, sample_rate: int = 16000, language: str | None = None
@@ -88,13 +89,16 @@ class WhisperSTT(STT):
 
 
 def get_stt() -> STT:
-    """Return the configured STT engine (the ONE place the provider is chosen)."""
+    """Return the configured STT engine (the ONE place the provider is chosen).
+
+    Default is faster-whisper (free, local, no key). Sarvam is used only when
+    explicitly selected AND a key is present.
+    """
     settings = get_settings()
-    if settings.STT_PROVIDER == "whisper":
-        return WhisperSTT()
-    if settings.SARVAM_API_KEY:
-        return SarvamSTT()
-    log.info("stt.fallback_whisper", reason="no SARVAM_API_KEY")
+    if settings.STT_PROVIDER == "sarvam":
+        if settings.SARVAM_API_KEY:
+            return SarvamSTT()
+        log.info("stt.fallback_whisper", reason="STT_PROVIDER=sarvam but no SARVAM_API_KEY")
     return WhisperSTT()
 
 

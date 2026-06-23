@@ -43,9 +43,9 @@ dev = [
 voice = [
     "numpy>=1.26",
     "sounddevice>=0.5",      # local mic/speaker transport
-    "pvporcupine>=3.0",      # "Hey IRIS" wake word
-    "kokoro-onnx>=0.4",      # local Kokoro-82M female voice (af_heart)
-    "faster-whisper>=1.0",   # offline STT fallback
+    "openwakeword>=0.6",     # "Hey IRIS" wake word (Apache-2.0, local, no key)
+    "kokoro-onnx>=0.4",      # local Kokoro-82M female voice (af_heart, Apache-2.0)
+    "faster-whisper>=1.0",   # default STT (MIT, local, no key)
 ]
 
 [build-system]
