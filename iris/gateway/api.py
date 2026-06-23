@@ -21,8 +21,10 @@ from iris.core.orchestrator import Orchestrator
 from iris.data.db import init_models, session_scope
 from iris.data.repo import MessageRepo, SessionRepo, UserRepo, record_usage, seed_defaults
 from iris.gateway.middleware import TenantMiddleware
+from iris.gateway.ws import register_ws
 from iris.llm import get_llm
 from iris.mcp.host import MCPHost
+from iris.security.audit import subscribe_audit
 from iris.security.redaction import configure_logging
 
 configure_logging()  # install the redaction-aware structlog pipeline early
@@ -60,6 +62,7 @@ async def lifespan(app: FastAPI):
     log.info("data.ready", tenant_id=tenant_id)
 
     bus = EventBus()
+    subscribe_audit(bus)  # persist agent/tool events to actions_audit
     mcp = MCPHost()
     health = await mcp.connect_all()
     log.info("mcp.host_ready", health=health)
@@ -79,6 +82,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="I.R.I.S.", version=__version__, lifespan=lifespan)
     app.add_middleware(TenantMiddleware)
+    register_ws(app)  # /ws live Agent Monitor stream
 
     @app.get("/health")
     async def health(request: Request) -> dict:

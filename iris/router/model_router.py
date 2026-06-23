@@ -47,12 +47,15 @@ class ModelChoice:
 
 # ── The ONLY place Gemini model ids appear ───────────────────────────────────
 # (model id, default max_output_tokens, use_batch)
+# NOTE: the PRD named "gemini-3.1-pro" for the hard tier, but that id is not a
+# real/available model (404). The current top Gemini model is gemini-2.5-pro,
+# used here for HARD/LONG_CONTEXT. Swapping to a future Pro is a one-line change.
 MODEL_MAP: dict[RequestClass, ModelChoice] = {
     RequestClass.TRIVIAL: ModelChoice("gemini-2.5-flash-lite", 256),
     RequestClass.SIMPLE: ModelChoice("gemini-2.5-flash-lite", 1_024),
     RequestClass.STANDARD: ModelChoice("gemini-2.5-flash", 2_048),
-    RequestClass.HARD: ModelChoice("gemini-3.1-pro", 8_192),
-    RequestClass.LONG_CONTEXT: ModelChoice("gemini-3.1-pro", 8_192),
+    RequestClass.HARD: ModelChoice("gemini-2.5-pro", 8_192),
+    RequestClass.LONG_CONTEXT: ModelChoice("gemini-2.5-pro", 8_192),
     RequestClass.BACKGROUND: ModelChoice("gemini-2.5-flash", 4_096, use_batch=True),
 }
 
@@ -159,7 +162,7 @@ class ModelPrice:
 PRICE_MAP: dict[str, ModelPrice] = {
     "gemini-2.5-flash-lite": ModelPrice(0.10, 0.40),
     "gemini-2.5-flash": ModelPrice(0.30, 2.50),
-    "gemini-3.1-pro": ModelPrice(2.00, 12.00),
+    "gemini-2.5-pro": ModelPrice(1.25, 10.00),
 }
 
 

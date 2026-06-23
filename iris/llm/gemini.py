@@ -48,8 +48,8 @@ class _CircuitBreaker:
     state — so it does not violate the stateless-core rule.
     """
 
-    fail_threshold: int = 5
-    cooldown_seconds: float = 30.0
+    fail_threshold: int = 8
+    cooldown_seconds: float = 20.0
     _consecutive_failures: int = 0
     _opened_at: float | None = field(default=None)
 
@@ -86,7 +86,7 @@ class GeminiClient(LLMClient):
         *,
         api_key: str | None = None,
         usage_sink: UsageSink | None = None,
-        timeout_seconds: float = 60.0,
+        timeout_seconds: float = 120.0,  # Pro reasoning can be slow
         max_retries: int = 4,
     ) -> None:
         # GOLDEN RULE #8: the key comes from settings, nowhere else.

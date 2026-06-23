@@ -22,8 +22,9 @@ export interface ChatMsg {
 
 export interface AgentEvent {
   ts: number;
-  type: string; // agent_start | agent_update | agent_complete | tool_result | confirm_request | final
+  type: string; // agent_start | agent_update | agent_complete | agent_failed | tool_result | confirm_request | final
   agent?: string;
+  status?: string; // running | ok | error | failed | denied | confirm | blocked
   summary?: string;
   payload?: unknown;
 }

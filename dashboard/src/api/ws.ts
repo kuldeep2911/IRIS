@@ -32,8 +32,9 @@ export function connectWs(): void {
       useStore.getState().pushAgentEvent({
         ts: Date.now(),
         type: data.type ?? "event",
-        agent: data.agent,
-        summary: data.summary,
+        agent: data.agent_name ?? data.agent,
+        status: data.status,
+        summary: data.summary ?? (typeof data.text === "string" ? data.text.slice(0, 80) : undefined),
         payload: data.payload ?? data,
       });
     } catch {

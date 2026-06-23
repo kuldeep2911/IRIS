@@ -28,8 +28,8 @@ def test_model_ids_match_the_locked_strategy():
     assert model_for(RequestClass.TRIVIAL).model == "gemini-2.5-flash-lite"
     assert model_for(RequestClass.SIMPLE).model == "gemini-2.5-flash-lite"
     assert model_for(RequestClass.STANDARD).model == "gemini-2.5-flash"
-    assert model_for(RequestClass.HARD).model == "gemini-3.1-pro"
-    assert model_for(RequestClass.LONG_CONTEXT).model == "gemini-3.1-pro"
+    assert model_for(RequestClass.HARD).model == "gemini-2.5-pro"
+    assert model_for(RequestClass.LONG_CONTEXT).model == "gemini-2.5-pro"
     assert model_for(RequestClass.BACKGROUND).model == "gemini-2.5-flash"
 
 
